@@ -23,6 +23,10 @@ data/
 # Ralph iteration log (process artifact, not product)
 progress.txt
 
+# --- Internal dev docs (not shared) ---
+PROMPT.md
+docs/SPEC.md
+
 # --- OS / editor cruft ---
 .DS_Store
 Thumbs.db
