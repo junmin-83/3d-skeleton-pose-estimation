@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 import yaml
 
-from src.calibration.calibrate import load_cameras_yaml
+from src.calibration.camera_io import load_cameras_yaml
 from src.core.types import NUM_KEYPOINTS, CameraParams, DepthCameraParams, Pose3D
 from src.fusion.depth_fusion import back_project_depth_keypoints, fuse
 from src.smoothing.one_euro import PoseSmoother

@@ -14,15 +14,14 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from src.calibration.calibrate import (
+from src.calibration.camera_io import load_cameras_yaml, save_cameras_yaml
+from src.calibration.extrinsics import (
     build_camera_params,
-    build_object_points,
     calibrate_extrinsics,
     estimate_board_pose,
-    load_cameras_yaml,
-    reprojection_error,
-    save_cameras_yaml,
 )
+from src.calibration.intrinsics import build_object_points
+from src.calibration.reprojection import reprojection_error
 from src.core.geometry import build_projection_matrix, project_points
 from src.core.types import DepthCameraParams
 
