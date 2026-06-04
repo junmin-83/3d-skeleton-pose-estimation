@@ -33,9 +33,12 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.core.types import COCO_SKELETON, NUM_KEYPOINTS, Pose3D  # noqa: E402
+from src.core.types import NUM_KEYPOINTS, Pose3D  # noqa: E402
 from src.fusion.depth_fusion import back_project_depth_keypoints  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
+from src.render.skeleton_2d import draw_skeleton_2d, label_panel  # noqa: E402
+from src.render.skeleton_3d import render_pose3d_frame  # noqa: E402
+from src.render.video_writer import LazyVideoWriter  # noqa: E402
 from src.smoothing.one_euro import PoseSmoother  # noqa: E402
 
 PW, PH = 320, 240  # per-panel size
@@ -65,24 +68,6 @@ def _read_tum_assoc(tum_dir: Path) -> list[tuple[str, str]]:
     return pairs
 
 
-def draw_2d(canvas, kpts, scores, thr):
-    # kpts are in the original 640x480 image; scale into the panel.
-    pix = np.round(kpts * np.array([PW / 640.0, PH / 480.0])).astype(int)
-    for i, j in COCO_SKELETON:
-        if scores[i] >= thr and scores[j] >= thr:
-            cv2.line(canvas, tuple(pix[i]), tuple(pix[j]), (0, 180, 0), 2)
-    for k in range(len(pix)):
-        if scores[k] >= thr:
-            cv2.circle(canvas, tuple(pix[k]), 3, (0, 0, 255), -1)
-    return canvas
-
-
-def label(panel, text):
-    cv2.rectangle(panel, (0, 0), (PW, 20), (0, 0, 0), -1)
-    cv2.putText(panel, text, (6, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
-    return panel
-
-
 def depth_panel(depth_m, kpts, scores, thr, dmin, dmax):
     valid = (depth_m > 0) & (depth_m >= dmin) & (depth_m <= dmax)
     vis = np.full((*depth_m.shape, 3), 30, np.uint8)
@@ -93,26 +78,7 @@ def depth_panel(depth_m, kpts, scores, thr, dmin, dmax):
         cm[~valid] = (30, 30, 30)
         vis = cm
     panel = cv2.resize(vis, (PW, PH))
-    return draw_2d(panel, kpts, scores, thr)
-
-
-def render_3d(fig, ax, pose, lims):
-    ax.cla()
-    pts, valid = pose.points, pose.valid
-    for i, j in COCO_SKELETON:
-        if valid[i] and valid[j]:
-            ax.plot(*[[pts[i, a], pts[j, a]] for a in range(3)], c="royalblue", lw=2)
-    if valid.any():
-        ax.scatter(*pts[valid].T, c="royalblue", s=18)
-    ax.set_xlim(*lims[0])
-    ax.set_ylim(*lims[1])
-    ax.set_zlim(*lims[2])
-    ax.set_xlabel("X(m)")
-    ax.set_ylabel("Y(m)")
-    ax.set_zlabel("Z(m)")
-    ax.view_init(elev=-75, azim=-90)
-    fig.canvas.draw()
-    return cv2.resize(cv2.cvtColor(np.asarray(fig.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR), (PW, PH))
+    return draw_skeleton_2d(panel, kpts, scores, thr, scale=(PW / 640.0, PH / 480.0))
 
 
 def _realsense_frames(num):
@@ -179,8 +145,9 @@ def main() -> None:
     smoother = PoseSmoother(NUM_KEYPOINTS, freq=args.fps, min_cutoff=1.0, beta=0.01, d_cutoff=1.0)
     fig = plt.figure(figsize=(PW / 100, PH / 100), dpi=100)
     ax = fig.add_subplot(111, projection="3d")
-    writer, lims = None, None
-    video_path = Path(args.video)
+    writer = LazyVideoWriter(args.video, args.fps)
+    lims = None
+    scale = (PW / 640.0, PH / 480.0)
 
     n = 0
     for color, depth_m, K in frames:
@@ -199,26 +166,26 @@ def main() -> None:
             c = pose.points[pose.valid].mean(axis=0)
             lims = [(c[a] - 0.8, c[a] + 0.8) for a in range(3)]
 
-        cpanel = label(draw_2d(cv2.resize(color, (PW, PH)), pose2d.keypoints, pose2d.scores, 0.3), "RGB + 2D")
-        dpanel = label(depth_panel(depth_m, pose2d.keypoints, pose2d.scores, 0.3, args.depth_min, args.depth_max), "Depth")
-        p3d = label(render_3d(fig, ax, pose, lims or [(-1, 1)] * 3), f"3D (depth) f{args.start + n}")
+        rgb_panel = draw_skeleton_2d(cv2.resize(color, (PW, PH)), pose2d.keypoints, pose2d.scores, 0.3, scale=scale)
+        cpanel = label_panel(rgb_panel, "RGB + 2D", PW, font_scale=0.42)
+        dpanel = label_panel(depth_panel(depth_m, pose2d.keypoints, pose2d.scores, 0.3, args.depth_min, args.depth_max),
+                             "Depth", PW, font_scale=0.42)
+        p3d = label_panel(render_pose3d_frame(fig, ax, pose, lims or [(-1, 1)] * 3, (PW, PH),
+                                              point_size=18, view_init=(-75, -90)),
+                          f"3D (depth) f{args.start + n}", PW, font_scale=0.42)
         frame = np.hstack([cpanel, dpanel, p3d])
 
-        if writer is None:
-            video_path.parent.mkdir(parents=True, exist_ok=True)
-            h, w = frame.shape[:2]
-            writer = cv2.VideoWriter(str(video_path), cv2.VideoWriter_fourcc(*"mp4v"), args.fps, (w, h))
         writer.write(frame)
         if n % 10 == 0:
             print(f"[rgbd] frame {n}: {int(pose.valid.sum())}/17 joints from depth")
         n += 1
 
-    if writer is None:
+    if n == 0:
         print("[rgbd] no frames processed.")
         sys.exit(1)
     writer.release()
     plt.close(fig)
-    print(f"[rgbd] result video ({n} frames) -> {video_path}")
+    print(f"[rgbd] result video ({n} frames) -> {args.video}")
 
 
 if __name__ == "__main__":

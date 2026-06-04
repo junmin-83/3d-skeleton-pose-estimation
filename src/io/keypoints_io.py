@@ -1,9 +1,7 @@
-"""3D skeleton visualisation and keypoint export/import utilities.
+"""Serialization of 3D pose sequences to/from JSON and NPY.
 
-The matplotlib Agg backend is activated at import time so this module works
-in headless/test environments without a display server.
-
-Units: all 3D coordinates are in **meters** (world frame, COCO-17 layout).
+Kept separate from the 3D plotting code (``src/render/skeleton_3d.py``) so
+result I/O does not depend on matplotlib. Units: meters, world frame, COCO-17.
 """
 
 from __future__ import annotations
@@ -12,111 +10,10 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-import matplotlib
-matplotlib.use("Agg")  # must be before pyplot import
-import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 – registers 3D projection
 
-from src.core.types import COCO_SKELETON, Pose3D
+from src.core.types import Pose3D
 
-
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
-
-def plot_skeleton_3d(
-    pose3d: Pose3D,
-    ax: "Axes3D | None" = None,
-    title: str | None = None,
-    elev: float = 15.0,
-    azim: float = -70.0,
-) -> tuple[plt.Figure, "Axes3D"]:
-    """Plot a 3D skeleton on a matplotlib 3D axes.
-
-    Only valid keypoints (``pose3d.valid == True``) are drawn.  Bones that
-    touch at least one invalid joint are skipped.
-
-    Args:
-        pose3d: The 3D pose to visualise.
-        ax:     Existing ``Axes3D`` to draw on.  A new figure+axes is created
-                when ``None``.
-        title:  Optional axes title.
-        elev:   Elevation angle for the 3D view (degrees).
-        azim:   Azimuth angle for the 3D view (degrees).
-
-    Returns:
-        ``(fig, ax)`` tuple.
-    """
-    if ax is None:
-        fig = plt.figure(figsize=(6, 6))
-        ax = fig.add_subplot(111, projection="3d")
-    else:
-        fig = ax.get_figure()
-
-    pts = pose3d.points   # (K, 3)
-    valid = pose3d.valid  # (K,) bool
-
-    # Scatter valid keypoints.
-    valid_pts = pts[valid]
-    if valid_pts.size > 0:
-        ax.scatter(
-            valid_pts[:, 0],
-            valid_pts[:, 1],
-            valid_pts[:, 2],
-            c="royalblue",
-            s=30,
-            zorder=5,
-        )
-
-    # Draw bones.
-    for i, j in COCO_SKELETON:
-        if i < len(valid) and j < len(valid) and valid[i] and valid[j]:
-            xs = [pts[i, 0], pts[j, 0]]
-            ys = [pts[i, 1], pts[j, 1]]
-            zs = [pts[i, 2], pts[j, 2]]
-            ax.plot(xs, ys, zs, color="steelblue", linewidth=1.5)
-
-    ax.set_xlabel("X (m)")
-    ax.set_ylabel("Y (m)")
-    ax.set_zlabel("Z (m)")
-    ax.view_init(elev=elev, azim=azim)
-
-    if title:
-        ax.set_title(title)
-
-    # Equal-ish aspect ratio: set equal range on all axes.
-    if valid_pts.size > 0:
-        ranges = valid_pts.max(axis=0) - valid_pts.min(axis=0)
-        max_range = float(ranges.max()) if ranges.max() > 0 else 1.0
-        mid = (valid_pts.max(axis=0) + valid_pts.min(axis=0)) / 2.0
-        ax.set_xlim(mid[0] - max_range / 2, mid[0] + max_range / 2)
-        ax.set_ylim(mid[1] - max_range / 2, mid[1] + max_range / 2)
-        ax.set_zlim(mid[2] - max_range / 2, mid[2] + max_range / 2)
-
-    return fig, ax
-
-
-def save_skeleton_png(pose3d: Pose3D, path: str) -> None:
-    """Render a 3D skeleton and save it as a PNG file.
-
-    The parent directory is created automatically if it does not exist.
-
-    Args:
-        pose3d: The 3D pose to render.
-        path:   Destination file path (should end in ``.png``).
-    """
-    out_path = Path(path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    fig, _ = plot_skeleton_3d(pose3d)
-    fig.savefig(str(out_path), dpi=100, bbox_inches="tight")
-    plt.close(fig)
-
-
-# ---------------------------------------------------------------------------
-# Export / import
-# ---------------------------------------------------------------------------
 
 def export_keypoints(
     poses: "Pose3D | Sequence[Pose3D]",

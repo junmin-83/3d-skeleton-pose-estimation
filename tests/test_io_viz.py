@@ -1,4 +1,4 @@
-"""Tests for frame_reader.py and visualize_3d.py.
+"""Tests for frame_reader.py, render/skeleton_3d.py, and io/keypoints_io.py.
 
 All tests run headless (no display required) and offline (no network).
 """
@@ -13,11 +13,8 @@ import pytest
 
 from src.io.frame_reader import CameraSpec, MultiViewFrameReader, nearest_frame_match
 from src.core.types import Pose3D, NUM_KEYPOINTS
-from src.viz.visualize_3d import (
-    export_keypoints,
-    load_keypoints,
-    save_skeleton_png,
-)
+from src.io.keypoints_io import export_keypoints, load_keypoints
+from src.render.skeleton_3d import save_skeleton_png
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +193,7 @@ class TestVisualization:
         assert out.stat().st_size > 0
 
     def test_plot_skeleton_3d_returns_fig_ax(self):
-        from src.viz.visualize_3d import plot_skeleton_3d
+        from src.render.skeleton_3d import plot_skeleton_3d
         import matplotlib.pyplot as plt
         pose = _make_pose3d(seed=7)
         fig, ax = plot_skeleton_3d(pose, title="Test")
@@ -206,7 +203,7 @@ class TestVisualization:
 
     def test_plot_skeleton_3d_partial_valid(self):
         """Bones connecting invalid joints must be skipped without error."""
-        from src.viz.visualize_3d import plot_skeleton_3d
+        from src.render.skeleton_3d import plot_skeleton_3d
         import matplotlib.pyplot as plt
         pose = _make_pose3d(seed=3)
         # Mark half the keypoints invalid.
@@ -217,7 +214,7 @@ class TestVisualization:
 
     def test_plot_all_invalid(self):
         """All-invalid pose should not crash."""
-        from src.viz.visualize_3d import plot_skeleton_3d
+        from src.render.skeleton_3d import plot_skeleton_3d
         import matplotlib.pyplot as plt
         points = np.zeros((NUM_KEYPOINTS, 3))
         scores = np.zeros(NUM_KEYPOINTS)

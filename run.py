@@ -14,7 +14,8 @@ import argparse
 from pathlib import Path
 
 from src.pipeline import Pipeline
-from src.viz.visualize_3d import export_keypoints, save_skeleton_png
+from src.io.keypoints_io import export_keypoints
+from src.render.skeleton_3d import save_skeleton_png
 
 
 def _parse_args() -> argparse.Namespace:

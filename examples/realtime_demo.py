@@ -24,28 +24,14 @@ import time
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 # Make ``src`` importable when this script is run directly from examples/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.core.types import COCO_17_KEYPOINTS, COCO_SKELETON  # noqa: E402
+from src.core.types import COCO_17_KEYPOINTS  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
-
-
-def draw_pose(image: np.ndarray, pose, score_thr: float) -> np.ndarray:
-    """Overlay the COCO-17 skeleton + keypoints on a copy of ``image``."""
-    out = image.copy()
-    kpts, scores = pose.keypoints, pose.scores
-    for i, j in COCO_SKELETON:
-        if scores[i] >= score_thr and scores[j] >= score_thr:
-            p1 = tuple(np.round(kpts[i]).astype(int))
-            p2 = tuple(np.round(kpts[j]).astype(int))
-            cv2.line(out, p1, p2, (0, 255, 0), 2)
-    for k in range(len(kpts)):
-        if scores[k] >= score_thr:
-            cv2.circle(out, tuple(np.round(kpts[k]).astype(int)), 4, (0, 0, 255), -1)
-    return out
+from src.render.skeleton_2d import draw_skeleton_2d  # noqa: E402
+from src.render.video_writer import LazyVideoWriter  # noqa: E402
 
 
 def frame_source(args: argparse.Namespace):
@@ -98,28 +84,18 @@ def main() -> None:
 
     times: list[float] = []
     last_pose = last_annotated = None
-    writer = None
-    writer_failed = False
-    video_path = Path(args.video)
+    writer = LazyVideoWriter(args.video, args.fps)
     for idx, frame in enumerate(frame_source(args)):
         t0 = time.perf_counter()
         pose = detector.detect_best(frame)        # -> Pose2D with 17 COCO keypoints
         dt = time.perf_counter() - t0
         times.append(dt)
 
-        annotated = draw_pose(frame, pose, detector.score_threshold)
-        if writer is None and not writer_failed:  # lazy-init once the frame size is known
-            video_path.parent.mkdir(parents=True, exist_ok=True)
-            height, width = annotated.shape[:2]
-            writer = cv2.VideoWriter(
-                str(video_path), cv2.VideoWriter_fourcc(*"mp4v"), args.fps, (width, height)
-            )
-            if not writer.isOpened():
-                writer.release()
-                writer, writer_failed = None, True
-                print(f"[demo] WARNING: cannot open MP4 writer for {video_path}; video skipped.")
-        if writer is not None:
-            writer.write(annotated)
+        annotated = draw_skeleton_2d(
+            frame, pose.keypoints, pose.scores, detector.score_threshold,
+            copy=True, line_color=(0, 255, 0), point_radius=4,
+        )
+        writer.write(annotated)
         last_pose, last_annotated = pose, annotated
 
         n_valid = int((pose.scores >= detector.score_threshold).sum())
@@ -130,9 +106,9 @@ def main() -> None:
         print("[demo] no frames processed.")
         sys.exit(1)
 
-    if writer is not None:
+    if writer.opened:
         writer.release()
-        print(f"[demo] annotated video ({len(times)} frames @ {args.fps:g} fps) -> {video_path}")
+        print(f"[demo] annotated video ({len(times)} frames @ {args.fps:g} fps) -> {args.video}")
 
     # First frame includes model warm-up; report steady-state throughput.
     steady = times[1:] or times

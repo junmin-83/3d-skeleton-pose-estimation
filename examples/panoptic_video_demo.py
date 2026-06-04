@@ -39,9 +39,12 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.core.types import COCO_SKELETON, CameraParams  # noqa: E402
+from src.core.types import CameraParams  # noqa: E402
 from src.pipeline import Pipeline  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
+from src.render.skeleton_2d import draw_skeleton_2d, label_panel  # noqa: E402
+from src.render.skeleton_3d import render_pose3d_frame  # noqa: E402
+from src.render.video_writer import LazyVideoWriter  # noqa: E402
 
 PW, PH = 360, 240
 _CM_TO_M = 0.01  # CMU Panoptic calibration is in centimeters
@@ -63,43 +66,6 @@ def load_panoptic_hd_cameras(calib_path: str) -> list[CameraParams]:
             image_size=(int(c["resolution"][0]), int(c["resolution"][1])),
         ))
     return cams
-
-
-def draw_2d(canvas, kpts, scores, cam_size, thr):
-    sx, sy = PW / cam_size[0], PH / cam_size[1]
-    pix = (kpts * np.array([sx, sy])).round().astype(int)
-    for i, j in COCO_SKELETON:
-        if scores[i] >= thr and scores[j] >= thr:
-            cv2.line(canvas, tuple(pix[i]), tuple(pix[j]), (0, 180, 0), 2)
-    for k in range(len(pix)):
-        if scores[k] >= thr:
-            cv2.circle(canvas, tuple(pix[k]), 3, (0, 0, 255), -1)
-    return canvas
-
-
-def label(panel, text):
-    cv2.rectangle(panel, (0, 0), (PW, 20), (0, 0, 0), -1)
-    cv2.putText(panel, text, (6, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-    return panel
-
-
-def render_3d(fig, ax, pose, lims):
-    ax.cla()
-    pts, valid = pose.points, pose.valid
-    for i, j in COCO_SKELETON:
-        if valid[i] and valid[j]:
-            ax.plot(*[[pts[i, a], pts[j, a]] for a in range(3)], c="royalblue", lw=2)
-    if valid.any():
-        ax.scatter(*pts[valid].T, c="royalblue", s=20)
-    ax.set_xlim(*lims[0])
-    ax.set_ylim(*lims[1])
-    ax.set_zlim(*lims[2])
-    ax.set_xlabel("X(m)")
-    ax.set_ylabel("Y(m)")
-    ax.set_zlabel("Z(m)")
-    fig.canvas.draw()
-    bgr = cv2.cvtColor(np.asarray(fig.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
-    return cv2.resize(bgr, (PW, PH))
 
 
 def _limits_from(pose, pad=0.6):
@@ -144,8 +110,8 @@ def main() -> None:
 
     fig = plt.figure(figsize=(PW / 100, PH / 100), dpi=100)
     ax = fig.add_subplot(111, projection="3d")
-    writer, lims = None, None
-    video_path = Path(args.video)
+    writer = LazyVideoWriter(args.video, args.fps)
+    lims = None
 
     for f in range(args.num_frames):
         frames = []
@@ -168,25 +134,23 @@ def main() -> None:
         panels = []
         for v, n in enumerate(names):
             p = cv2.resize(frames[v], (PW, PH))
-            draw_2d(p, kpts[v], scores[v], cams[v].image_size, 0.4)
-            panels.append(label(p, f"HD {n} (RGB) 2D"))
-        panels.append(label(render_3d(fig, ax, pose, lims or _limits_from(pose)),
-                            f"3D reconstruction f{args.start + f}"))
+            cam_w, cam_h = cams[v].image_size
+            draw_skeleton_2d(p, kpts[v], scores[v], 0.4, scale=(PW / cam_w, PH / cam_h))
+            panels.append(label_panel(p, f"HD {n} (RGB) 2D", PW, font_scale=0.45))
+        panels.append(label_panel(
+            render_pose3d_frame(fig, ax, pose, lims or _limits_from(pose), (PW, PH), point_size=20),
+            f"3D reconstruction f{args.start + f}", PW, font_scale=0.45))
         frame = np.hstack(panels)
 
-        if writer is None:
-            video_path.parent.mkdir(parents=True, exist_ok=True)
-            h, w = frame.shape[:2]
-            writer = cv2.VideoWriter(str(video_path), cv2.VideoWriter_fourcc(*"mp4v"), args.fps, (w, h))
         writer.write(frame)
         if f % 10 == 0:
             print(f"[panoptic-vid] frame {f}: {int(pose.valid.sum())}/17 joints reconstructed")
 
     for cap in caps:
         cap.release()
-    if writer is not None:
+    if writer.opened:
         writer.release()
-        print(f"[panoptic-vid] result video -> {video_path}")
+        print(f"[panoptic-vid] result video -> {args.video}")
     plt.close(fig)
 
 
