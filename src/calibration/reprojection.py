@@ -1,8 +1,8 @@
-"""Reprojection-error reporting — the calibration accuracy gate (SPEC 4-3).
+"""Reprojection-error reporting, the calibration accuracy gate (SPEC 4-3).
 
-Lengths are meters; pixels are ``(u, v)``. Extrinsics ``(R, t)`` map
-WORLD -> CAMERA; ``reprojection_report`` projects world points through each
-camera's ``P = K [R | t]`` and reports the per-camera pixel RMS.
+Lengths in meters; pixels are (u, v). Extrinsics (R, t) map WORLD -> CAMERA;
+reprojection_report projects world points through each camera's P = K[R|t] and
+reports the per-camera pixel RMS.
 """
 
 from __future__ import annotations
@@ -21,16 +21,16 @@ def reprojection_error(
     rvec_or_R: np.ndarray,
     tvec: np.ndarray,
 ) -> float:
-    """Mean pixel RMS reprojection error via ``cv2.projectPoints``.
+    """RMS reprojection error (pixels) via cv2.projectPoints.
 
     Args:
         object_points: (N, 3) board points, meters.
-        image_points: (N, 2) observed pixels ``(u, v)``.
+        image_points: (N, 2) observed pixels (u, v).
         K: (3, 3) intrinsic.
         dist: (k,) distortion coefficients.
         rvec_or_R: (3,)/(3, 1) Rodrigues vector OR (3, 3) rotation matrix,
             board -> camera.
-        tvec: (3,) translation board -> camera.
+        tvec: (3,) translation, board -> camera.
 
     Returns:
         RMS reprojection error in pixels (sqrt of mean squared L2 residual).
@@ -54,21 +54,20 @@ def reprojection_report(
     observations: dict[str, tuple[np.ndarray, np.ndarray]],
     verbose: bool = True,
 ) -> dict[str, float]:
-    """Per-camera reprojection RMS using each camera's WORLD -> pixel ``P``.
+    """Per-camera reprojection RMS using each camera's WORLD -> pixel P.
 
-    For each camera with an entry in ``observations`` (world points, observed
-    pixels), the world points are projected through ``P = K [R | t]`` and the
-    pixel RMS is computed. Distortion is applied via ``cv2.projectPoints`` when
-    the camera has non-zero coefficients (real data); for synthetic, undistorted
-    data the result matches the linear ``P`` projection.
+    For each camera with an observations entry (world points, observed pixels),
+    project the world points through P = K[R|t] and compute the pixel RMS.
+    cv2.projectPoints applies distortion when coefficients are non-zero (real
+    data); for synthetic undistorted data this matches the linear P projection.
 
     Args:
-        cameras: list of calibrated cameras.
-        observations: ``name -> (object_points_world (N, 3), image_points (N, 2))``.
+        cameras: calibrated cameras.
+        observations: name -> (object_points_world (N, 3), image_points (N, 2)).
         verbose: print per-camera and mean RMS.
 
     Returns:
-        ``name -> rms`` plus a ``'mean'`` aggregate over reported cameras.
+        name -> rms, plus a 'mean' aggregate over reported cameras.
     """
     report: dict[str, float] = {}
     for cam in cameras:
@@ -77,7 +76,7 @@ def reprojection_report(
         world_pts, image_pts = observations[cam.name]
         world_pts = np.asarray(world_pts, np.float64).reshape(-1, 3)
         image_pts = np.asarray(image_pts, np.float64).reshape(-1, 2)
-        # World -> camera pose IS the extrinsic (R, t); reuse reprojection_error.
+        # World -> camera pose is just the extrinsic (R, t); reuse reprojection_error.
         rms = reprojection_error(world_pts, image_pts, cam.K, cam.dist, cam.R, cam.t)
         report[cam.name] = rms
         if verbose:

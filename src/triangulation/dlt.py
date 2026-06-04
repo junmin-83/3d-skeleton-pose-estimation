@@ -1,14 +1,12 @@
-"""Confidence-weighted Direct Linear Transform (DLT) triangulation.
+"""Confidence-weighted DLT triangulation. Pure linear solve only.
 
-Coordinate conventions (see ``src/core/geometry.py`` and ``src/core/types.py``):
-  - Pixels are ``(u, v)`` order and are assumed **already undistorted**.
-  - Projection matrices ``P = K [R | t]`` map a homogeneous **world** point to
-    pixels (world -> pixel). The world frame is the single fixed project frame
-    (default: reference camera cam0). All lengths are **meters**.
-  - Triangulated points are returned in that same **world** frame, meters.
+Conventions (see core/geometry.py, core/types.py):
+  - Pixels are (u, v), already undistorted.
+  - P = K[R|t] maps a homogeneous world point to pixels. World frame is the
+    fixed project frame (default: reference camera cam0). Lengths in meters.
+  - Outputs are in that same world frame, meters.
 
-This module performs pure linear triangulation only. View selection, score
-thresholding and outlier rejection live in ``robust.py``.
+View selection, score thresholding, and outlier rejection live in robust.py.
 """
 
 from __future__ import annotations
@@ -25,26 +23,23 @@ def triangulate_point_dlt(
 ) -> np.ndarray:
     """Triangulate one 3D world point from multi-view pixel observations.
 
-    Builds the homogeneous DLT linear system and solves it via SVD. For each
-    view with observed pixel ``(u, v)``, per-view weight ``w`` and projection
-    rows ``P0, P1, P2`` of ``P = K [R | t]``::
+    Each view contributes two rows to the homogeneous DLT system; for pixel
+    (u, v), weight w, and projection rows P0/P1/P2 of P = K[R|t]::
 
         row_a = w * (u * P2 - P0)
         row_b = w * (v * P2 - P1)
 
-    Stacking the ``2V`` rows gives ``A`` (shape ``(2V, 4)``). The solution is
-    the right-singular vector of ``A`` for the smallest singular value, then
-    dehomogenized by dividing by its last component.
+    Stack the 2V rows into A (2V, 4) and take the right-singular vector for the
+    smallest singular value, then dehomogenize by its last component.
 
     Args:
-        points_2d: (V, 2) pixel observations ``(u, v)`` across ``V`` views,
-            undistorted, in the same view order as ``proj_matrices``.
-        proj_matrices: sequence of ``V`` (3, 4) world->pixel matrices ``P``.
-        weights: (V,) non-negative per-view confidence. Defaults to all ones
-            (unweighted). Each view's two equations are scaled by its weight.
+        points_2d: (V, 2) undistorted (u, v), same view order as proj_matrices.
+        proj_matrices: V (3, 4) world->pixel matrices P.
+        weights: (V,) non-negative per-view confidence; scales each view's two
+            rows. Defaults to all ones.
 
     Returns:
-        (3,) triangulated point in the **world** frame, meters.
+        (3,) point in the world frame, meters.
     """
     pts = np.asarray(points_2d, dtype=float).reshape(-1, 2)
     n_views = pts.shape[0]
@@ -68,8 +63,8 @@ def triangulate_point_dlt(
             )
 
     if not np.any(np.abs(w) > 1e-12):
-        # All contributing views have zero weight -> the system carries no
-        # constraint; don't fabricate a point. robust.py drops the joint on NaN.
+        # All weights zero means no constraint, so don't fabricate a point.
+        # robust.py drops the joint on NaN.
         return np.full(3, np.nan)
 
     rows = np.empty((2 * n_views, 4), dtype=float)
@@ -77,13 +72,12 @@ def triangulate_point_dlt(
         rows[2 * i] = w[i] * (u * P[2] - P[0])
         rows[2 * i + 1] = w[i] * (v * P[2] - P[1])
 
-    # Smallest-singular-value right vector -> homogeneous solution X = (x,y,z,W).
+    # Last right-singular vector is the homogeneous solution X = (x, y, z, W).
     _, _, vh = np.linalg.svd(rows)
     x_hom = vh[-1]
-    # Degenerate/collinear geometry (parallel rays, a point near infinity) drives
-    # the homogeneous coordinate W -> 0; dehomogenizing would yield inf/NaN that
-    # bypasses outlier rejection and poisons the temporal filter. Flag as NaN so
-    # robust.py drops the joint.
+    # Degenerate geometry (parallel rays, point near infinity) sends W -> 0.
+    # Dehomogenizing then gives inf/NaN that slips past outlier rejection and
+    # poisons the temporal filter, so flag NaN and let robust.py drop the joint.
     if abs(x_hom[3]) < 1e-9:
         return np.full(3, np.nan)
     return x_hom[:3] / x_hom[3]
@@ -95,24 +89,23 @@ def triangulate_keypoints(
     proj_matrices: Sequence[np.ndarray],
     weight_by_score: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Weighted-DLT triangulate every keypoint over *all* provided views.
+    """Weighted-DLT triangulate every keypoint over all provided views.
 
-    No thresholding or view selection happens here; every view contributes to
-    every keypoint (occlusion handling lives in ``robust.py``). When
-    ``weight_by_score`` is True the per-view ``score`` is used as the DLT weight
-    so low-confidence (e.g. occluded) observations are down-weighted.
+    No thresholding or view selection here; every view feeds every keypoint
+    (occlusion handling lives in robust.py). With weight_by_score, each view's
+    score becomes its DLT weight, so low-confidence (e.g. occluded)
+    observations count less.
 
     Args:
-        keypoints_per_view: (V, K, 2) undistorted pixel coords ``(u, v)``.
+        keypoints_per_view: (V, K, 2) undistorted (u, v).
         scores_per_view: (V, K) per-view per-keypoint confidence in [0, 1].
-        proj_matrices: sequence of ``V`` (3, 4) world->pixel matrices, same
-            view order as the first axis of ``keypoints_per_view``.
-        weight_by_score: if True weight each view by its score, else weight all
-            views equally (unit weights).
+        proj_matrices: V (3, 4) world->pixel matrices, same view order as the
+            first axis of keypoints_per_view.
+        weight_by_score: weight by score if True, else unit weights.
 
     Returns:
         points_3d: (K, 3) world coords, meters.
-        conf: (K,) mean of the per-view scores used for each keypoint.
+        conf: (K,) mean per-view score for each keypoint.
     """
     kpts = np.asarray(keypoints_per_view, dtype=float)
     scores = np.asarray(scores_per_view, dtype=float)

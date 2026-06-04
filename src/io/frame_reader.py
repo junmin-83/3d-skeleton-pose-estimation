@@ -1,14 +1,12 @@
-"""Multi-view frame reader for synchronized camera input.
+"""Multi-view frame reader for synchronized cameras.
 
-Supports two modes:
-  * File mode  – each camera source is a directory of sorted image files.
-                 Hardware-trigger assumption: images are aligned by index.
-                 Optional sidecar timestamp lists enable software nearest-frame
-                 matching via ``nearest_frame_match``.
-  * Live mode  – each camera source is an integer device index; frames are
-                 grabbed from ``cv2.VideoCapture`` in sequence.
+Two modes:
+  File: each source is a directory of sorted images, aligned by index
+        (hardware-trigger assumption). Supply per-camera timestamps to switch
+        to nearest-frame matching instead.
+  Live: each source is an integer device index, grabbed via cv2.VideoCapture.
 
-Units: timestamps are floating-point seconds.
+Timestamps are float seconds.
 """
 
 from __future__ import annotations
@@ -22,18 +20,12 @@ import cv2
 import numpy as np
 
 
-# ---------------------------------------------------------------------------
-# Data container
-# ---------------------------------------------------------------------------
-
 @dataclass
 class FrameSet:
-    """One synchronised snapshot across all cameras.
+    """One synchronized snapshot across all cameras.
 
-    Attributes:
-        frames:     camera name -> BGR image (H, W, 3) uint8.
-        timestamps: camera name -> capture timestamp in seconds.
-        index:      zero-based frame index within the sequence.
+    frames: name -> BGR image (H, W, 3) uint8. timestamps: name -> seconds.
+    index: zero-based position in the sequence.
     """
 
     frames: dict[str, np.ndarray]
@@ -41,28 +33,12 @@ class FrameSet:
     index: int
 
 
-# ---------------------------------------------------------------------------
-# Timestamp helper
-# ---------------------------------------------------------------------------
-
 def nearest_frame_match(
     reference_ts: float,
     candidate_ts: list[float],
     tolerance: float,
 ) -> int | None:
-    """Return the index of the candidate timestamp closest to *reference_ts*.
-
-    Args:
-        reference_ts:  The target timestamp (seconds).
-        candidate_ts:  Ordered list of candidate timestamps to search.
-        tolerance:     Maximum allowed absolute difference (seconds).
-                       If the closest candidate is farther than this, return
-                       ``None``.
-
-    Returns:
-        Index into *candidate_ts* of the best match, or ``None`` when no
-        candidate is within *tolerance*.
-    """
+    """Index of the candidate closest to reference_ts, or None if none within tolerance (seconds)."""
     if not candidate_ts:
         return None
 
@@ -72,21 +48,13 @@ def nearest_frame_match(
     return None
 
 
-# ---------------------------------------------------------------------------
-# Camera spec
-# ---------------------------------------------------------------------------
-
 @dataclass
 class CameraSpec:
-    """Specification for one camera stream.
+    """One camera stream.
 
-    Attributes:
-        name:       Unique identifier used as the key in ``FrameSet.frames``.
-        source:     Directory path (str or Path) for file mode, or integer
-                    device index for live mode.
-        timestamps: Optional list of per-frame timestamps (seconds) used in
-                    file mode for software sync.  When provided, frames are
-                    matched by nearest timestamp rather than by index.
+    name: key used in FrameSet.frames. source: directory for file mode, or
+    int device index for live mode. timestamps: optional per-frame seconds;
+    when given (file mode), frames match by nearest timestamp instead of index.
     """
 
     name: str
@@ -94,40 +62,18 @@ class CameraSpec:
     timestamps: list[float] = field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Reader
-# ---------------------------------------------------------------------------
-
 class MultiViewFrameReader:
-    """Reads synchronised frames from multiple cameras.
+    """Reads synchronized frames from multiple cameras.
 
-    File mode
-    ---------
-    Each ``CameraSpec.source`` is a directory containing image files
-    (JPEG/PNG/BMP/…).  Files are enumerated once at construction and sorted
-    lexicographically so that ``cam0/frame_0001.jpg`` aligns with
-    ``cam1/frame_0001.jpg`` by position.
+    File mode: each source is a directory of images. Files are listed once at
+    construction and sorted lexicographically, so cam0/frame_0001.jpg lines up
+    with cam1/frame_0001.jpg by position. If every camera has timestamps, sync
+    uses nearest_frame_match against the first camera; otherwise by index.
 
-    If *all* cameras supply ``CameraSpec.timestamps``, the reader uses
-    ``nearest_frame_match`` against the first camera's timestamps as the
-    reference.  Otherwise frames are aligned strictly by index.
+    Live mode: each source is an int device index. read() pulls one frame from
+    every camera in order.
 
-    Live mode
-    ---------
-    Each ``CameraSpec.source`` is an integer device index passed to
-    ``cv2.VideoCapture``.  ``read()`` calls ``cap.read()`` for every camera in
-    order.
-
-    Usage::
-
-        specs = [
-            CameraSpec("cam0", "/data/cam0"),
-            CameraSpec("cam1", "/data/cam1"),
-        ]
-        reader = MultiViewFrameReader(specs)
-        for frameset in reader:
-            process(frameset)
-        reader.close()
+    Iterate the reader, then close() (or use it as a context manager).
     """
 
     def __init__(self, specs: list[CameraSpec]) -> None:
@@ -136,7 +82,7 @@ class MultiViewFrameReader:
         self._caps: dict[str, cv2.VideoCapture] = {}
         self._file_lists: dict[str, list[Path]] = {}
 
-        # Detect mode from the first spec's source type.
+        # Mode comes from the first source's type.
         first_source = specs[0].source if specs else 0
         self._live = isinstance(first_source, int)
 
@@ -144,10 +90,6 @@ class MultiViewFrameReader:
             self._init_live()
         else:
             self._init_file()
-
-    # ------------------------------------------------------------------
-    # Initialisation helpers
-    # ------------------------------------------------------------------
 
     def _init_live(self) -> None:
         for spec in self._specs:
@@ -175,18 +117,8 @@ class MultiViewFrameReader:
                 )
             self._file_lists[spec.name] = files
 
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
-
     def read(self) -> FrameSet | None:
-        """Read the next synchronised set of frames.
-
-        Returns:
-            A ``FrameSet`` on success, or ``None`` when the sequence is
-            exhausted (file mode) or a camera fails to deliver a frame (live
-            mode).
-        """
+        """Next FrameSet, or None when the sequence ends (file) or a camera drops a frame (live)."""
         if self._live:
             return self._read_live()
         return self._read_file()
@@ -210,10 +142,6 @@ class MultiViewFrameReader:
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    # ------------------------------------------------------------------
-    # Internal read implementations
-    # ------------------------------------------------------------------
-
     def _read_live(self) -> FrameSet | None:
         frames: dict[str, np.ndarray] = {}
         timestamps: dict[str, float] = {}
@@ -230,13 +158,13 @@ class MultiViewFrameReader:
         return result
 
     def _read_file(self) -> FrameSet | None:
-        # Check that all cameras still have frames at the current index.
+        # Stop once any camera runs out of frames.
         for spec in self._specs:
             file_list = self._file_lists[spec.name]
             if self._index >= len(file_list):
                 return None
 
-        # Determine per-camera file index (index or nearest-timestamp match).
+        # Match by timestamp only if every camera has them; else by index.
         use_ts_match = all(
             len(spec.timestamps) > 0 for spec in self._specs
         )
@@ -245,7 +173,7 @@ class MultiViewFrameReader:
         timestamps: dict[str, float] = {}
 
         if use_ts_match:
-            # Use the first camera as the reference timestamp.
+            # First camera is the timestamp reference.
             ref_spec = self._specs[0]
             ref_ts = ref_spec.timestamps[self._index]
 

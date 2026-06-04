@@ -1,14 +1,11 @@
-"""Real-time-style demo: extract the 17 COCO keypoints per frame with RTMPose.
+"""RTMPose 2D 데모: 프레임마다 COCO-17 키포인트를 뽑는다.
 
-Runs the project's ``RTMPoseDetector`` over a frame source and reports per-frame
-timing (FPS), prints the 17 keypoints of the last frame, and writes an annotated
-**MP4 video of every frame** (plus a last-frame still image). The frame source is
-either a live webcam (``--camera <idx>``) or a static image looped ``--frames``
-times to emulate a stream (default).
+프레임 소스(웹캠 --camera 또는 정적 이미지를 --frames번 반복)에 RTMPoseDetector를
+돌려서 프레임별 FPS를 찍고, 마지막 프레임의 17개 키포인트를 출력하고, 전체 프레임을
+annotated MP4 + 마지막 프레임 PNG로 저장한다.
 
-Requires ``rtmlib`` + ``onnxruntime-gpu`` (see requirements.txt; CPU onnxruntime
-also works); rtmlib downloads the RTMPose ONNX model on first run. Exits with a
-clear message if unavailable.
+rtmlib + onnxruntime 필요(GPU 권장, CPU도 동작). 첫 실행 때 RTMPose ONNX 모델을
+받아온다. 없으면 메시지 찍고 종료.
 
 Usage::
 
@@ -25,7 +22,7 @@ from pathlib import Path
 
 import cv2
 
-# Make ``src`` importable when this script is run directly from examples/.
+# examples/에서 직접 실행할 때 src import 되게.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.core.types import COCO_17_KEYPOINTS  # noqa: E402
@@ -35,7 +32,7 @@ from src.render.video_writer import LazyVideoWriter  # noqa: E402
 
 
 def frame_source(args: argparse.Namespace):
-    """Yield BGR frames from a webcam (live) or a looped static image."""
+    """웹캠(라이브) 또는 반복되는 정적 이미지에서 BGR 프레임을 yield."""
     if args.camera is not None:
         cap = cv2.VideoCapture(args.camera)
         if not cap.isOpened():
@@ -87,7 +84,7 @@ def main() -> None:
     writer = LazyVideoWriter(args.video, args.fps)
     for idx, frame in enumerate(frame_source(args)):
         t0 = time.perf_counter()
-        pose = detector.detect_best(frame)        # -> Pose2D with 17 COCO keypoints
+        pose = detector.detect_best(frame)        # Pose2D, COCO 17개 키포인트
         dt = time.perf_counter() - t0
         times.append(dt)
 
@@ -110,7 +107,7 @@ def main() -> None:
         writer.release()
         print(f"[demo] annotated video ({len(times)} frames @ {args.fps:g} fps) -> {args.video}")
 
-    # First frame includes model warm-up; report steady-state throughput.
+    # 첫 프레임은 모델 워밍업이 섞이니 빼고 정상 상태 처리량을 본다.
     steady = times[1:] or times
     avg_fps = len(steady) / sum(steady)
 

@@ -1,12 +1,11 @@
 """Shared data types and the fixed COCO-17 keypoint layout.
 
-Units & frames (project-wide, see also ``geometry.py``):
-  - All lengths are **meters**; all pixel coordinates are ``(u, v)`` order.
-  - 3D points live in a single **world** frame (default: the reference camera
-    cam0 frame). Camera extrinsics ``(R, t)`` map world -> camera.
+Conventions (project-wide, see geometry.py): lengths in meters, pixels as (u, v).
+3D points are in one world frame (default: reference camera cam0). Extrinsics
+(R, t) map world -> camera.
 
-The COCO-17 index order below is *fixed* and identical for every view, which
-is what guarantees cross-view keypoint correspondence for triangulation.
+The COCO-17 index order below is fixed and identical for every view. That's what
+makes keypoints correspond across views for triangulation.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-# --- COCO-17 keypoint layout (fixed index order, shared by every view) ------
+# COCO-17 keypoint layout, fixed index order shared by every view.
 COCO_17_KEYPOINTS: tuple[str, ...] = (
     "nose",            # 0
     "left_eye",        # 1
@@ -55,10 +54,9 @@ COCO_SKELETON: tuple[tuple[int, int], ...] = (
 class CameraParams:
     """Intrinsics + extrinsics for one camera.
 
-    Extrinsics map WORLD -> CAMERA:  ``X_cam = R @ X_world + t``.
-    The projection matrix ``P = K @ [R | t]`` maps a homogeneous world point to
-    pixels. Distortion must be removed from pixels *before* using ``P`` (the
-    pinhole model in ``P`` does not account for lens distortion).
+    Extrinsics map world -> camera: X_cam = R @ X_world + t.
+    P = K @ [R | t] maps a homogeneous world point to pixels. Undistort pixels
+    first; P is a plain pinhole model and ignores lens distortion.
     """
 
     name: str
@@ -76,18 +74,18 @@ class CameraParams:
 
     @property
     def P(self) -> np.ndarray:
-        """(3, 4) projection matrix ``K [R | t]`` (world -> pixel)."""
+        """(3, 4) projection matrix K [R | t], world -> pixel."""
         return self.K @ np.hstack([self.R, self.t.reshape(3, 1)])
 
 
 @dataclass
 class DepthCameraParams(CameraParams):
-    """An RGB-D camera whose depth stream is aligned to its colour stream.
+    """RGB-D camera with depth aligned to its colour stream.
 
-    ``K``/``dist``/``R``/``t`` describe the colour stream (used for 2D pose and
-    triangulation like any RGB view). The depth-specific fields below are used
-    by depth back-projection. When depth is aligned to colour, ``depth_K`` ==
-    ``K``; the fields are kept separate so an un-aligned setup can be supported.
+    K/dist/R/t describe the colour stream (used for 2D pose and triangulation
+    like any RGB view); the depth_* fields drive depth back-projection. With
+    aligned depth, depth_K == K. They're kept separate so an un-aligned setup
+    can still be supported.
     """
 
     depth_K: np.ndarray | None = None        # (3, 3) depth intrinsic, pixels

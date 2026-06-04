@@ -1,7 +1,7 @@
-"""Camera-parameter serialization to/from the ``config/cameras.yaml`` schema.
+"""Camera-parameter serialization to/from the config/cameras.yaml schema.
 
-Round-trips intrinsics, WORLD -> CAMERA extrinsics, image size, ``source``, and
-(for ``rgbd`` cameras) the depth fields. Lengths are meters; pixels are ``(u, v)``.
+Round-trips intrinsics, WORLD -> CAMERA extrinsics, image size, source, and
+(for rgbd cameras) the depth fields. Lengths in meters; pixels are (u, v).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from src.core.types import CameraParams, DepthCameraParams
 
 
 def _camera_to_dict(cam: CameraParams) -> dict:
-    """Serialize one camera to the ``config/cameras.yaml`` schema."""
+    """Serialize one camera to the config/cameras.yaml schema."""
     is_rgbd = isinstance(cam, DepthCameraParams)
     entry: dict = {
         "name": cam.name,
@@ -44,12 +44,11 @@ def save_cameras_yaml(
     world_frame: str = "reference_camera",
     reference: str = "cam0",
 ) -> None:
-    """Write cameras to ``path`` matching the ``config/cameras.yaml`` schema.
+    """Write cameras to path in the config/cameras.yaml schema.
 
-    Top-level keys are ``units``, ``world`` and ``cameras``. Each camera carries
-    ``name, type, K, dist, R, t, image_size, source`` and, for ``rgbd`` cameras,
-    the depth fields (``depth_K, depth_scale, depth_to_color_R,
-    depth_to_color_t``).
+    Top-level keys: units, world, cameras. Each camera carries name, type, K,
+    dist, R, t, image_size, source, plus the depth fields (depth_K,
+    depth_scale, depth_to_color_R, depth_to_color_t) for rgbd cameras.
     """
     doc = {
         "units": {"length": units},
@@ -61,11 +60,11 @@ def save_cameras_yaml(
 
 
 def load_cameras_yaml(path: str | Path) -> list[CameraParams]:
-    """Load cameras from a ``config/cameras.yaml``-schema file.
+    """Load cameras from a config/cameras.yaml-schema file.
 
     Returns:
-        list of ``CameraParams`` (``rgbd`` cameras become ``DepthCameraParams``
-        with their depth fields restored).
+        list of CameraParams; rgbd cameras come back as DepthCameraParams with
+        their depth fields restored.
     """
     with open(path, "r", encoding="utf-8") as fh:
         doc = yaml.safe_load(fh)
@@ -96,7 +95,7 @@ def load_cameras_yaml(path: str | Path) -> list[CameraParams]:
                 t=np.asarray(entry["t"], float),
                 image_size=image_size,
             )
-        # ``source`` is not a dataclass field; attach it for round-trip fidelity.
+        # source isn't a dataclass field; attach it so the round-trip preserves it.
         cam.source = entry.get("source")
         cameras.append(cam)
     return cameras

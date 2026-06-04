@@ -1,7 +1,7 @@
-"""Intel RealSense live camera as an :class:`RGBDSource` (needs pyrealsense2).
+"""Intel RealSense live camera as an RGBDSource (needs pyrealsense2).
 
-``pyrealsense2`` is imported lazily inside :meth:`RealSenseSource.frames` so the
-rest of the package works without it installed.
+pyrealsense2 is imported lazily inside frames() so the rest of the package
+works without it installed.
 """
 
 from __future__ import annotations
@@ -16,9 +16,8 @@ from src.io.sources.rgbd_source import RGBDFrame, RGBDSource
 class RealSenseSource(RGBDSource):
     """Live aligned RGB-D frames from an Intel RealSense camera.
 
-    Depth is aligned to the colour stream; intrinsics and depth scale are read
-    from the device. Yields up to ``num`` frames (startup/dropped frames are
-    skipped, matching the original demo behaviour).
+    Depth is aligned to the colour stream; intrinsics and depth scale come from
+    the device. Yields up to num frames, skipping startup/dropped frames.
     """
 
     def __init__(self, num: int, width: int = 640, height: int = 480, fps: int = 30) -> None:

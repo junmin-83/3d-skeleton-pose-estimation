@@ -1,8 +1,8 @@
 """Camera intrinsic calibration: checkerboard detection + cv2.calibrateCamera.
 
-Lengths are **meters**; pixel coordinates are ``(u, v)`` order (consistent with
-``core/geometry.py``). Intrinsic accuracy is the pipeline accuracy bottleneck
-(SPEC 4-3), so callers should check the returned reprojection RMS.
+Lengths in meters; pixels are (u, v) (matches core/geometry.py). Intrinsic
+accuracy is the pipeline bottleneck (SPEC 4-3), so check the returned
+reprojection RMS.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-# cornerSubPix refinement criteria (shared by intrinsic calibration).
+# cornerSubPix refinement criteria, shared across intrinsic calibration.
 _SUBPIX_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-3)
 _SUBPIX_WIN = (11, 11)
 
@@ -19,11 +19,11 @@ def build_object_points(pattern_size: tuple[int, int], square_size_m: float) -> 
     """Planar board points (Z = 0) for one view.
 
     Args:
-        pattern_size: ``(cols, rows)`` of INNER corners.
-        square_size_m: edge length of one square, meters.
+        pattern_size: (cols, rows) of inner corners.
+        square_size_m: square edge length, meters.
 
     Returns:
-        (cols*rows, 3) float64 board-frame coordinates, row-major in ``(x, y)``.
+        (cols*rows, 3) float64 board-frame coords, row-major in (x, y).
     """
     cols, rows = pattern_size
     obj = np.zeros((rows * cols, 3), dtype=np.float64)
@@ -37,17 +37,17 @@ def find_checkerboard_corners(
     pattern_size: tuple[int, int],
     square_size_m: float,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
-    """Detect + sub-pixel-refine checkerboard corners across images.
+    """Detect and sub-pixel-refine checkerboard corners across images.
 
     Args:
-        images: list of images (grayscale or BGR ``np.ndarray``).
-        pattern_size: ``(cols, rows)`` of inner corners.
+        images: grayscale or BGR np.ndarrays.
+        pattern_size: (cols, rows) of inner corners.
         square_size_m: square edge length, meters.
 
     Returns:
-        ``(object_points_list, image_points_list)`` containing one entry per
-        image where the board was found. ``object_points`` are (N, 3) meters;
-        ``image_points`` are (N, 2) pixel ``(u, v)``.
+        (object_points_list, image_points_list), one entry per image where the
+        board was found. object_points are (N, 3) meters; image_points are
+        (N, 2) pixel (u, v).
     """
     object_points_list: list[np.ndarray] = []
     image_points_list: list[np.ndarray] = []
@@ -75,16 +75,16 @@ def calibrate_intrinsics(
     image_points_list: list[np.ndarray],
     image_size: tuple[int, int],
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Estimate intrinsics via ``cv2.calibrateCamera``.
+    """Estimate intrinsics via cv2.calibrateCamera.
 
     Args:
         object_points_list: per-view (N, 3) board points, meters.
         image_points_list: per-view (N, 2) pixel corners.
-        image_size: ``(width, height)`` in pixels.
+        image_size: (width, height) in pixels.
 
     Returns:
-        ``(K, dist, rms)`` where ``K`` is (3, 3), ``dist`` is (k,), and ``rms``
-        is the OpenCV overall reprojection RMS (pixels).
+        (K, dist, rms): K is (3, 3), dist is (k,), rms is OpenCV's overall
+        reprojection RMS (pixels).
     """
     object_points = [p.astype(np.float32).reshape(-1, 1, 3) for p in object_points_list]
     image_points = [p.astype(np.float32).reshape(-1, 1, 2) for p in image_points_list]

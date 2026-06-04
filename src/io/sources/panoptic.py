@@ -1,8 +1,7 @@
-"""CMU Panoptic HD data access: calibration loader + multi-view HD frame iterator.
+"""CMU Panoptic HD access: calibration loader plus multi-view HD frame iterator.
 
-Panoptic is a multi-view RGB (triangulation) source — no depth — so it is not an
-:class:`~src.io.sources.rgbd_source.RGBDSource`; it provides calibrated cameras
-and synchronized HD video frames instead.
+Panoptic is multi-view RGB for triangulation (no depth), so it is not an
+RGBDSource. It gives calibrated cameras and synchronized HD video frames.
 """
 
 from __future__ import annotations
@@ -45,10 +44,10 @@ def iter_panoptic_hd_frames(
 ) -> Iterator[list[np.ndarray]]:
     """Yield, per timestep, a list of BGR frames (one per camera).
 
-    Opens the ``hdVideos/hd_00_<n>.mp4`` for each camera eagerly (so an unreadable
-    video raises ``FileNotFoundError`` before iteration begins), seeks to
-    ``start``, then yields up to ``num`` synchronized frame-lists, stopping early
-    when any stream ends. Captures are released when iteration finishes.
+    Opens each camera's hdVideos/hd_00_<n>.mp4 up front (an unreadable video
+    raises FileNotFoundError before iteration), seeks to start, then yields up
+    to num synchronized frame-lists, stopping early when any stream ends.
+    Captures are released when iteration finishes.
     """
     seq = Path(seq_dir)
     caps = [cv2.VideoCapture(str(seq / "hdVideos" / f"hd_00_{n.split('_')[1]}.mp4"))

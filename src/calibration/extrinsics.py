@@ -1,11 +1,11 @@
-"""Common-world extrinsic calibration + ``CameraParams`` assembly.
+"""Common-world extrinsic calibration + CameraParams assembly.
 
-Extrinsics ``(R, t)`` map WORLD -> CAMERA:  ``X_cam = R @ X_world + t``; with
-``P = K [R | t]`` mapping a homogeneous world point to pixels. ``solvePnP`` /
-:func:`estimate_board_pose` return BOARD -> CAMERA poses; :func:`calibrate_extrinsics`
+Extrinsics (R, t) map WORLD -> CAMERA: X_cam = R @ X_world + t, with
+P = K[R|t] taking a homogeneous world point to pixels. solvePnP /
+estimate_board_pose return BOARD -> CAMERA poses; calibrate_extrinsics
 re-expresses them as WORLD -> CAMERA, where the world is the reference camera
-``cam0`` (R = I, t = 0) by default, or the board origin. Lengths are meters;
-pixels are ``(u, v)``. See ``core/geometry.py`` and ``core/types.py``.
+cam0 (R = I, t = 0) by default, or the board origin. Lengths in meters; pixels
+are (u, v). See core/geometry.py and core/types.py.
 """
 
 from __future__ import annotations
@@ -26,13 +26,13 @@ def estimate_board_pose(
 
     Args:
         object_points: (N, 3) board-frame points, meters.
-        image_points: (N, 2) pixel corners ``(u, v)``.
+        image_points: (N, 2) pixel corners (u, v).
         K: (3, 3) intrinsic.
         dist: (k,) distortion coefficients.
 
     Returns:
-        ``(R, t)``: (3, 3) rotation and (3,) translation mapping board -> camera
-        (``X_cam = R @ X_board + t``).
+        (R, t): (3, 3) rotation and (3,) translation, board -> camera
+        (X_cam = R @ X_board + t).
     """
     obj = np.asarray(object_points, np.float64).reshape(-1, 1, 3)
     img = np.asarray(image_points, np.float64).reshape(-1, 1, 2)
@@ -52,29 +52,26 @@ def calibrate_extrinsics(
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Convert per-camera BOARD -> CAMERA poses into WORLD -> CAMERA extrinsics.
 
-    Each ``board_poses[name] = (R_i, t_i)`` maps board -> camera_i:
-    ``X_cami = R_i X_board + t_i``.
+    Each board_poses[name] = (R_i, t_i) maps board -> camera_i:
+    X_cami = R_i X_board + t_i.
 
-    If ``world_frame == 'board_origin'`` the world IS the board, so the
-    extrinsics are the board poses unchanged.
+    world_frame == 'board_origin': world IS the board, so the extrinsics are
+    the board poses unchanged.
 
-    If ``world_frame == 'reference_camera'`` the world IS the reference camera
-    frame. A world point expressed in the reference camera frame relates to the
-    board via the reference pose ``(R_ref, t_ref)``:
-    ``X_board = R_ref^T (X_world - t_ref)``. Substituting into camera_i's
-    board pose gives
-    ``X_cami = R_i R_ref^T X_world + (t_i - R_i R_ref^T t_ref)``, hence
-    ``R_world_to_cami = R_i @ R_ref.T`` and ``t = t_i - R_i @ R_ref.T @ t_ref``.
-    The reference camera itself becomes ``R = I, t = 0``.
+    world_frame == 'reference_camera': world IS the reference camera frame. A
+    world point relates to the board via the reference pose (R_ref, t_ref):
+    X_board = R_ref^T (X_world - t_ref). Substituting into camera_i's board
+    pose gives X_cami = R_i R_ref^T X_world + (t_i - R_i R_ref^T t_ref), i.e.
+    R_world_to_cami = R_i @ R_ref.T and t = t_i - R_i @ R_ref.T @ t_ref. The
+    reference camera itself becomes R = I, t = 0.
 
     Args:
-        board_poses: ``name -> (R, t)`` board -> camera poses.
-        reference: name of the reference camera (used as world for
-            ``reference_camera``).
-        world_frame: ``'reference_camera'`` or ``'board_origin'``.
+        board_poses: name -> (R, t) board -> camera poses.
+        reference: reference camera name (the world for 'reference_camera').
+        world_frame: 'reference_camera' or 'board_origin'.
 
     Returns:
-        ``name -> (R, t)`` world -> camera extrinsics.
+        name -> (R, t) world -> camera extrinsics.
     """
     if world_frame == "board_origin":
         return {
@@ -93,8 +90,9 @@ def calibrate_extrinsics(
     extrinsics: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for name, (R_i, t_i) in board_poses.items():
         if name == reference:
-            # world == reference camera frame, so its extrinsic is exactly
-            # identity (avoids ~1e-16 residue from R_ref @ R_ref.T).
+            # World == reference camera frame, so its extrinsic is exactly
+            # identity. Set it directly to avoid ~1e-16 residue from
+            # R_ref @ R_ref.T.
             extrinsics[name] = (np.eye(3), np.zeros(3))
             continue
         R_i = np.asarray(R_i, float).reshape(3, 3)
@@ -115,14 +113,13 @@ def build_camera_params(
     type: str = "rgb",
     **depth_kwargs: object,
 ) -> CameraParams:
-    """Construct a ``CameraParams`` (or ``DepthCameraParams`` for ``rgbd``).
+    """Build a CameraParams, or DepthCameraParams when type == 'rgbd'.
 
     Args:
         name, K, dist, R, t, image_size: standard camera fields (see types).
-        type: ``'rgb'`` or ``'rgbd'``.
-        **depth_kwargs: forwarded to ``DepthCameraParams`` for ``rgbd`` cameras
-            (``depth_K``, ``depth_scale``, ``depth_to_color_R``,
-            ``depth_to_color_t``).
+        type: 'rgb' or 'rgbd'.
+        **depth_kwargs: forwarded to DepthCameraParams for rgbd cameras
+            (depth_K, depth_scale, depth_to_color_R, depth_to_color_t).
     """
     common = dict(
         name=name,

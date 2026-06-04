@@ -1,9 +1,8 @@
-"""Entry point for the 3D skeleton pose estimation pipeline (live / recorded).
+"""3D 스켈레톤 pose 파이프라인 진입점 (라이브 / 녹화).
 
-Runs RTMPose 2D detection on each configured camera view, triangulates to 3D
-(+ depth fusion when a depth source is wired into the pipeline), applies One-Euro
-smoothing, and exports per-frame 3D keypoints. Requires rtmlib + onnxruntime and
-the camera sources / calibration configured in ``config/cameras.yaml``.
+설정된 카메라 뷰마다 RTMPose 2D 검출을 돌려 3D로 삼각측량하고(depth 소스가 연결돼
+있으면 depth fusion 추가), One-Euro 스무딩을 거쳐 프레임별 3D 키포인트를 내보낸다.
+rtmlib + onnxruntime와 config/cameras.yaml의 카메라 소스/캘리브레이션이 필요하다.
 
     uv run python run.py --config config/cameras.yaml
 """
@@ -27,8 +26,8 @@ def _parse_args() -> argparse.Namespace:
 
 
 def run_live(pipeline: Pipeline) -> list:
-    """Read synchronized frames from the configured sources and reconstruct 3D."""
-    from src.io.frame_reader import CameraSpec, MultiViewFrameReader  # local: needs cv2 capture
+    """설정된 소스에서 동기화된 프레임을 읽어 3D를 복원한다."""
+    from src.io.frame_reader import CameraSpec, MultiViewFrameReader  # cv2 capture 필요해서 로컬 import
 
     specs = [CameraSpec(cam.name, getattr(cam, "source", idx) or idx)
              for idx, cam in enumerate(pipeline.cameras)]
@@ -37,8 +36,8 @@ def run_live(pipeline: Pipeline) -> list:
     with MultiViewFrameReader(specs) as reader:
         for frameset in reader:
             keypoints, scores = pipeline.detect_2d(frameset)
-            # A wired DepthFrameSource backend would supply the aligned depth map
-            # here; without one this runs triangulation-only.
+            # DepthFrameSource 백엔드가 연결돼 있으면 여기서 정렬된 depth맵을 넘겨준다.
+            # 없으면 삼각측량만 돈다.
             pose = pipeline.process(keypoints, scores, depth_map=None,
                                     timestamp=frameset.index / fps)
             poses.append(pose)

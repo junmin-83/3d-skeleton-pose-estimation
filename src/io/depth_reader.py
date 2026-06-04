@@ -1,16 +1,14 @@
 """Depth frame sources for the RGB-D camera.
 
-The depth camera SDK is not yet decided, so acquisition is hidden behind the
-abstract :class:`DepthFrameSource`. Real SDK / dataset backends (Intel RealSense,
-TUM RGB-D, Azure Kinect, ...) subclass it and are plugged in later; tests and
-offline development run on :class:`DummyDepthSource` (synthetic).
+The depth SDK isn't picked yet, so acquisition sits behind DepthFrameSource.
+Real backends (RealSense, TUM RGB-D, Azure Kinect, ...) subclass it later;
+tests and offline work use the synthetic DummyDepthSource.
 
-Conventions (see also ``core/geometry.py``):
-  - Depth is assumed **aligned to the colour stream**: the metric ``Z`` returned
-    at colour pixel ``(u, v)`` is in **meters** (after applying ``depth_scale``).
-  - ``read()`` returns ``(depth_map (H, W) float32 meters, timestamp seconds)``.
-  - ``intrinsics()`` is the (3, 3) intrinsic of the stream the depth pixels live
-    in (the aligned colour pixel grid).
+Conventions (see also core/geometry.py):
+  - Depth is aligned to the colour stream: Z at colour pixel (u, v) is in
+    meters, after depth_scale.
+  - read() returns (depth_map (H, W) float32 meters, timestamp seconds).
+  - intrinsics() is the (3, 3) intrinsic of the aligned colour grid.
 """
 
 from __future__ import annotations
@@ -23,21 +21,19 @@ import numpy as np
 class DepthFrameSource(abc.ABC):
     """Abstract source of aligned, metric depth frames.
 
-    Real SDK backends (Intel RealSense / Azure Kinect / Orbbec) subclass this
-    and implement :meth:`read`, :meth:`intrinsics`, and :attr:`depth_scale`.
-    Depth is assumed already **aligned to the colour stream**, so the metric
-    ``Z`` (meters) at colour pixel ``(u, v)`` can be back-projected with this
-    source's intrinsic. ``open()``/``close()`` manage SDK/file handles and the
-    source doubles as a context manager.
+    Backends (RealSense / Azure Kinect / Orbbec) subclass this and implement
+    read, intrinsics, and depth_scale. Depth is already aligned to the colour
+    stream, so Z (meters) at colour pixel (u, v) back-projects with this
+    source's intrinsic. open()/close() manage handles; also a context manager.
     """
 
     @abc.abstractmethod
     def read(self) -> tuple[np.ndarray, float]:
-        """Return the next ``(depth_map (H, W) float32 meters, timestamp)``."""
+        """Next (depth_map (H, W) float32 meters, timestamp)."""
 
     @abc.abstractmethod
     def intrinsics(self) -> np.ndarray:
-        """Return the (3, 3) intrinsic matrix of the (aligned) depth stream."""
+        """(3, 3) intrinsic of the aligned depth stream."""
 
     @property
     @abc.abstractmethod
@@ -45,10 +41,10 @@ class DepthFrameSource(abc.ABC):
         """Raw depth unit -> meters multiplier."""
 
     def open(self) -> None:
-        """Acquire any underlying handle. No-op by default."""
+        """Acquire the handle. No-op by default."""
 
     def close(self) -> None:
-        """Release any underlying handle. No-op by default."""
+        """Release the handle. No-op by default."""
 
     def __enter__(self) -> "DepthFrameSource":
         self.open()
@@ -59,11 +55,10 @@ class DepthFrameSource(abc.ABC):
 
 
 class DummyDepthSource(DepthFrameSource):
-    """Synthetic depth source for tests and offline development.
+    """Synthetic depth source for tests and offline work.
 
-    Produces a constant-plane depth map (``default_z`` meters) into which
-    specific metric depths can be stamped via :meth:`set_depth`. Each
-    :meth:`read` returns the current map and an incrementing timestamp.
+    Starts as a constant plane at default_z meters; stamp specific depths with
+    set_depth. read() returns the current map and an incrementing timestamp.
     """
 
     def __init__(

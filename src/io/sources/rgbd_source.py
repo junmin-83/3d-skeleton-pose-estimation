@@ -1,9 +1,8 @@
-"""RGB-D frame source abstraction (aligned colour + metric depth + intrinsics).
+"""RGB-D frame source: aligned colour, metric depth, and intrinsics.
 
-This realises the depth-acquisition abstraction with concrete backends (see
-``tum.py``, ``realsense.py``) — previously the demos re-implemented acquisition
-inline. Each yielded frame carries the BGR colour image, a metric depth map
-(meters, aligned to colour), and the colour intrinsic ``K``.
+Concrete backends live in tum.py and realsense.py (demos used to inline this).
+Each frame is the BGR colour image, a depth map (meters, aligned to colour),
+and the colour intrinsic K.
 """
 
 from __future__ import annotations
@@ -17,11 +16,7 @@ import numpy as np
 
 @dataclass
 class RGBDFrame:
-    """One aligned RGB-D frame.
-
-    Unpacks as ``(color, depth_m, K)`` so callers can iterate either by
-    attribute or by tuple unpacking.
-    """
+    """One aligned RGB-D frame. Unpacks as (color, depth_m, K)."""
 
     color: np.ndarray    # (H, W, 3) BGR
     depth_m: np.ndarray  # (H, W) float32, meters (aligned to colour)
@@ -36,19 +31,18 @@ class RGBDFrame:
 class RGBDSource(abc.ABC):
     """Abstract source of aligned RGB-D frames.
 
-    Concrete backends implement :meth:`frames`. The source doubles as an
-    iterator (``for frame in source``) and a context manager.
+    Backends implement frames(). Also an iterator and a context manager.
     """
 
     @abc.abstractmethod
     def frames(self) -> Iterator[RGBDFrame]:
-        """Yield :class:`RGBDFrame` objects in acquisition order."""
+        """Yield RGBDFrames in acquisition order."""
 
     def open(self) -> None:
-        """Acquire any underlying handle. No-op by default."""
+        """Acquire the handle. No-op by default."""
 
     def close(self) -> None:
-        """Release any underlying handle. No-op by default."""
+        """Release the handle. No-op by default."""
 
     def __iter__(self) -> Iterator[RGBDFrame]:
         return self.frames()

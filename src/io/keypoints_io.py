@@ -1,7 +1,7 @@
-"""Serialization of 3D pose sequences to/from JSON and NPY.
+"""Serialize 3D pose sequences to/from JSON and NPY.
 
-Kept separate from the 3D plotting code (``src/render/skeleton_3d.py``) so
-result I/O does not depend on matplotlib. Units: meters, world frame, COCO-17.
+Split from the 3D plotting code (src/render/skeleton_3d.py) so result I/O
+doesn't pull in matplotlib. Units: meters, world frame, COCO-17.
 """
 
 from __future__ import annotations
@@ -20,33 +20,15 @@ def export_keypoints(
     path: str,
     fmt: str = "json",
 ) -> None:
-    """Export one or more poses to a file.
+    """Export one or more poses (one per frame) to "json" or "npy".
 
-    Args:
-        poses: A single ``Pose3D`` or a list/sequence of them (one per frame).
-        path:  Destination file path.  For ``fmt="npy"`` the path should end
-               in ``.npy``; a sidecar ``<path>.npz`` is written alongside it
-               containing ``scores``, ``valid``, and ``source``.
-        fmt:   ``"json"`` (default) or ``"npy"``.
+    For npy, points go to <path> (float64, (N, K, 3)) and a sidecar
+    <path>.npz holds scores (N, K), valid (N, K), source (N, K).
 
-    JSON format
-    -----------
-    A JSON array where each element is a dict::
-
-        {
-            "points": [[x, y, z], ...],   # K × 3 float
-            "scores": [s0, s1, ...],       # K float
-            "valid":  [true, false, ...],  # K bool
-            "source": ["tri", ...]         # K str
-        }
-
-    NPY format
-    ----------
-    The ``.npy`` file contains a ``float64`` array of shape ``(N, K, 3)``.
-    The sidecar ``.npz`` contains ``scores (N, K)``, ``valid (N, K)``, and
-    ``source (N, K)`` (object/str dtype).
+    JSON is an array of dicts: {"points": K x 3, "scores": K, "valid": K bool,
+    "source": K str}.
     """
-    # Normalise to list.
+    # One pose or many; normalize to a list.
     if isinstance(poses, Pose3D):
         pose_list: list[Pose3D] = [poses]
     else:
@@ -90,15 +72,7 @@ def export_keypoints(
 
 
 def load_keypoints(path: str, fmt: str = "json") -> list[Pose3D]:
-    """Load poses previously saved by :func:`export_keypoints`.
-
-    Args:
-        path: File path passed to ``export_keypoints``.
-        fmt:  ``"json"`` or ``"npy"``.
-
-    Returns:
-        List of :class:`~src.core.types.Pose3D` objects (one per frame).
-    """
+    """Load poses (one Pose3D per frame) written by export_keypoints; fmt is "json" or "npy"."""
     in_path = Path(path)
 
     if fmt == "json":

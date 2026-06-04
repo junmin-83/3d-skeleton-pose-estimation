@@ -1,12 +1,12 @@
 """3D skeleton rendering (COCO-17, meters, world frame).
 
-Two outputs share one home here:
-  - :func:`render_pose3d_frame` draws a pose onto a reused matplotlib 3D axes
-    and returns it as a BGR image (video demos, panel by panel).
-  - :func:`plot_skeleton_3d` / :func:`save_skeleton_png` produce a one-off
-    equal-aspect plot for PNG export (run.py).
+Two paths:
+  - render_pose3d_frame draws a pose onto a reused matplotlib 3D axes and returns
+    a BGR image (video demos, panel by panel).
+  - plot_skeleton_3d / save_skeleton_png produce a one-off equal-aspect plot for
+    PNG export (run.py).
 
-The matplotlib Agg backend is activated at import time for headless use.
+Agg backend is set at import time for headless use.
 """
 
 from __future__ import annotations
@@ -23,12 +23,8 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: E402,F401 - registers 3D projec
 from src.core.types import COCO_SKELETON, Pose3D  # noqa: E402
 
 
-# ---------------------------------------------------------------------------
-# Video-frame rendering (reused axes -> BGR image)
-# ---------------------------------------------------------------------------
-
 def _draw_bones(ax, pts: np.ndarray, valid: np.ndarray, color, lw: float) -> None:
-    """Plot COCO bones whose both endpoints are valid onto ``ax``."""
+    """Plot COCO bones with both endpoints valid onto ax."""
     for i, j in COCO_SKELETON:
         if i < len(valid) and j < len(valid) and valid[i] and valid[j]:
             ax.plot(*[[pts[i, a], pts[j, a]] for a in range(3)], c=color, lw=lw)
@@ -45,11 +41,10 @@ def render_pose3d_frame(
     view_init: tuple[float, float] | None = None,
     color: str = "royalblue",
 ) -> np.ndarray:
-    """Draw ``pose`` on a reused 3D ``ax`` and return a BGR image of ``out_size``.
+    """Draw pose on a reused 3D ax, return a BGR image of out_size.
 
-    ``lims`` is ``((xmin, xmax), (ymin, ymax), (zmin, zmax))``. ``view_init`` is
-    an optional ``(elev, azim)``. The axes is cleared each call so one figure
-    can be reused across all video frames.
+    lims is ((xmin,xmax), (ymin,ymax), (zmin,zmax)); view_init is an optional
+    (elev, azim). The axes is cleared each call so one figure serves all frames.
     """
     ax.cla()
     pts, valid = pose.points, pose.valid
@@ -69,10 +64,6 @@ def render_pose3d_frame(
     return cv2.resize(bgr, out_size)
 
 
-# ---------------------------------------------------------------------------
-# PNG plotting (one-off, equal aspect)
-# ---------------------------------------------------------------------------
-
 def plot_skeleton_3d(
     pose3d: Pose3D,
     ax: "Axes3D | None" = None,
@@ -82,9 +73,8 @@ def plot_skeleton_3d(
 ) -> tuple[plt.Figure, "Axes3D"]:
     """Plot a 3D skeleton on a matplotlib 3D axes (equal aspect).
 
-    Only valid keypoints (``pose3d.valid == True``) are drawn; bones touching an
-    invalid joint are skipped. Creates a new figure+axes when ``ax`` is ``None``.
-    Returns ``(fig, ax)``.
+    Only valid keypoints are drawn; bones touching an invalid joint are skipped.
+    Creates a new figure+axes when ax is None. Returns (fig, ax).
     """
     if ax is None:
         fig = plt.figure(figsize=(6, 6))
@@ -121,7 +111,7 @@ def plot_skeleton_3d(
     if title:
         ax.set_title(title)
 
-    # Equal-ish aspect ratio: set equal range on all axes.
+    # Equal-ish aspect: same range on all three axes.
     if valid_pts.size > 0:
         ranges = valid_pts.max(axis=0) - valid_pts.min(axis=0)
         max_range = float(ranges.max()) if ranges.max() > 0 else 1.0

@@ -1,18 +1,17 @@
 """Robust multi-view triangulation: view selection + outlier rejection.
 
-Wraps the pure confidence-weighted DLT (:mod:`src.triangulation.dlt`) with the
-per-keypoint policy from SPEC section 4-4:
+Wraps the pure weighted DLT (src.triangulation.dlt) with the per-keypoint
+policy from SPEC section 4-4:
 
-  - drop views whose score is below ``score_threshold``;
-  - if fewer than ``min_views`` remain, mark the joint invalid and defer it to
-    depth fusion (``source='missing'``);
+  - drop views scoring below score_threshold;
+  - if fewer than min_views remain, mark the joint invalid and leave it to
+    depth fusion (source='missing');
   - otherwise weighted-DLT triangulate from the kept views;
-  - optionally (``ransac=True``) reject views whose reprojection error exceeds
-    ``reproj_threshold_px`` and re-triangulate from the inliers.
+  - with ransac=True, also drop views whose reprojection error exceeds
+    reproj_threshold_px and re-triangulate from the inliers.
 
-Coordinate conventions match the rest of the project: pixels are ``(u, v)`` and
-undistorted; ``P = K [R | t]`` maps world -> pixel; results are in the **world**
-frame in meters. Returns a :class:`~src.core.types.Pose3D`.
+Conventions as elsewhere: undistorted (u, v) pixels, P = K[R|t] world->pixel,
+results in the world frame, meters. Returns a Pose3D.
 """
 
 from __future__ import annotations
@@ -47,25 +46,23 @@ def _ransac_inliers(
     min_views: int,
     reproj_threshold_px: float,
 ) -> np.ndarray | None:
-    """Find the largest consistent set of views via minimal-subset RANSAC.
+    """Largest reprojection-consistent view set via minimal (2-view) RANSAC.
 
-    A least-squares DLT over *all* views is biased by an outlier, inflating the
-    residuals of the good views too, so a single fit-then-threshold pass cannot
-    isolate the outlier. Instead, enumerate every minimal (2-view) subset,
-    triangulate it, and score how many views fall within ``reproj_threshold_px``
-    of that hypothesis. The hypothesis with the most inliers (ties broken by
-    lowest total inlier error) wins.
+    A single least-squares DLT over all views lets one outlier inflate every
+    view's residual, so fit-then-threshold can't isolate it. Instead enumerate
+    every 2-view subset, triangulate it, and count how many views land within
+    reproj_threshold_px. Most inliers wins, ties broken by lowest total inlier
+    error.
 
     Args:
-        points_2d: (V, 2) undistorted pixel observations.
-        proj_matrices: ``V`` (3, 4) world->pixel matrices.
-        weights: (V,) per-view confidence used when re-fitting a subset.
+        points_2d: (V, 2) undistorted pixels.
+        proj_matrices: V (3, 4) world->pixel matrices.
+        weights: (V,) per-view confidence, used when re-fitting a subset.
         min_views: minimum inlier count to accept a consensus set.
         reproj_threshold_px: inlier reprojection-error threshold (pixels).
 
     Returns:
-        Indices (into the V views) of the best inlier set, or ``None`` if no
-        consensus of at least ``min_views`` views exists.
+        Indices of the best inlier set, or None if no set reaches min_views.
     """
     n_views = len(proj_matrices)
     best_inliers: np.ndarray | None = None
@@ -103,22 +100,20 @@ def triangulate_robust(
     """Triangulate a single person's COCO keypoints with outlier rejection.
 
     Args:
-        keypoints_per_view: (V, K, 2) undistorted pixel coords ``(u, v)``.
+        keypoints_per_view: (V, K, 2) undistorted (u, v).
         scores_per_view: (V, K) per-view per-keypoint confidence in [0, 1].
-        proj_matrices: sequence of ``V`` (3, 4) world->pixel matrices ``P``,
-            same view order as the first axis of ``keypoints_per_view``.
-        score_threshold: views with ``score < score_threshold`` are excluded
-            for that keypoint.
-        min_views: minimum kept views required to reconstruct a keypoint.
-        ransac: if True, also reject views whose reprojection error exceeds
-            ``reproj_threshold_px`` and re-triangulate from the inliers.
+        proj_matrices: V (3, 4) world->pixel matrices P, same view order as the
+            first axis of keypoints_per_view.
+        score_threshold: per-keypoint, views scoring below this are dropped.
+        min_views: minimum kept views to reconstruct a keypoint.
+        ransac: if True, also drop views over reproj_threshold_px and
+            re-triangulate from the inliers.
         reproj_threshold_px: inlier reprojection-error threshold (pixels).
 
     Returns:
-        Pose3D with ``points`` (K, 3) world coords (NaN for unreconstructed
-        joints), ``scores`` (K,) mean confidence of contributing views (0 for
-        missing), ``valid`` (K,) bool, and ``source`` per-joint provenance tags
-        (``'triangulation'`` or ``'missing'``).
+        Pose3D: points (K, 3) world coords (NaN where unreconstructed), scores
+        (K,) mean confidence of contributing views (0 if missing), valid (K,)
+        bool, and source per-joint tags ('triangulation' or 'missing').
     """
     kpts = np.asarray(keypoints_per_view, dtype=float)
     scores = np.asarray(scores_per_view, dtype=float)
@@ -148,9 +143,9 @@ def triangulate_robust(
         sel_scores = view_scores[sel]
 
         if ransac:
-            # Consensus-based outlier rejection: pick the largest set of views
-            # mutually consistent under reprojection (handles a high-score view
-            # that is geometrically wrong, which score thresholding misses).
+            # Consensus rejection: pick the largest set of views mutually
+            # consistent under reprojection. Catches a high-score but
+            # geometrically wrong view that score thresholding lets through.
             inliers = _ransac_inliers(
                 sel_pts, sel_proj, sel_scores, min_views, reproj_threshold_px
             )
@@ -164,8 +159,8 @@ def triangulate_robust(
 
         point = triangulate_point_dlt(sel_pts, sel_proj, weights=sel_scores)
         if not np.isfinite(point).all():
-            # Degenerate/ill-conditioned geometry (e.g. parallel rays) produced a
-            # non-finite solution; drop the joint rather than emit inf/NaN.
+            # Degenerate geometry (e.g. parallel rays) gave a non-finite
+            # solution; drop the joint rather than emit inf/NaN.
             source.append("missing")
             continue
 

@@ -1,20 +1,20 @@
-"""실제 CMU Panoptic HD 영상으로 3D pose 결과영상을 만드는 데모 (RTMPose-on-pixels).
+"""CMU Panoptic HD 멀티뷰 영상으로 3D pose 결과영상을 만드는 데모 (RTMPose-on-pixels).
 
-다운로드한 Panoptic HD 비디오 N대(권장 단일 인물 시퀀스, 예: 171204_pose1)를 입력으로:
-프레임마다 각 뷰에 RTMPose를 돌려 2D를 얻고(실제 픽셀!), 실제 Panoptic calibration으로
-삼각측량해 3D를 복원한 뒤, [입력 뷰들 + 3D 복원]을 합성한 MP4를 만든다.
+HD 비디오 여러 대(단일 인물 시퀀스 권장, 예: 171204_pose1)를 받아서, 프레임마다 각 뷰에
+RTMPose를 돌려 2D를 얻고 Panoptic calibration으로 삼각측량해 3D를 복원한다. 출력은
+[입력 뷰들 + 3D 복원]을 붙인 MP4.
 
-전제 데이터(panoptic-toolbox 또는 직접 curl로 받기; README의 2-e 참고):
+필요한 데이터(panoptic-toolbox나 curl로 직접 받기; README 2-e 참고):
   <seq>/calibration_<seq>.json
   <seq>/hdVideos/hd_00_<NN>.mp4              (HD RGB, 카메라당 ~2.8GB)
   <seq>/hdPose3d_stage1_coco19/body3DScene_*.json   (선택: GT 비교용)
 
 주의:
-  - 단일 인물 시퀀스를 쓰세요. 다인 장면은 뷰 간 인물 매칭(association)이 추가로 필요하며
-    이 파이프라인은 single-person(best_person)만 지원합니다.
-  - depth(Kinect)는 .dat 원시 포맷 디코딩/동기/정렬이 필요해 여기선 HD RGB 삼각측량만
-    수행합니다(depth fusion off). depth까지 쓰려면 kcalibration + KINECTNODE depthdata.dat를
-    디코딩해 aligned depth맵(미터)을 pipeline.process(depth_map=...)로 넘기면 됩니다.
+  - 단일 인물 시퀀스만. 다인 장면은 뷰 간 인물 매칭(association)이 더 필요한데
+    이 파이프라인은 single-person(best_person)만 지원한다.
+  - depth(Kinect)는 .dat 디코딩/동기/정렬이 필요해서 여기선 HD RGB 삼각측량만 한다
+    (depth fusion off). depth까지 쓰려면 kcalibration + KINECTNODE depthdata.dat를
+    디코딩해 정렬된 depth맵(미터)을 pipeline.process(depth_map=...)로 넘기면 된다.
 
 Usage::
 

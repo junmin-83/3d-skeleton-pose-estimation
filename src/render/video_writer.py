@@ -1,7 +1,7 @@
-"""Lazy MP4 writer shared by the example demos.
+"""Lazy MP4 writer shared by the demos.
 
-Defers opening the ``cv2.VideoWriter`` until the first frame so the frame size
-is inferred from it, creates the parent directory, and uses the mp4v codec.
+Defers opening cv2.VideoWriter until the first frame so the size comes from it,
+creates the parent dir, and uses the mp4v codec.
 """
 
 from __future__ import annotations
@@ -13,19 +13,14 @@ import numpy as np
 
 
 class LazyVideoWriter:
-    """An MP4 writer that opens on the first :meth:`write` (size from the frame).
+    """MP4 writer that opens on the first write(), taking the size from the frame.
 
-    Parameters
-    ----------
-    path:
-        Destination ``.mp4`` path. Parent directories are created on open.
-    fps:
-        Playback frame rate.
+    Args:
+        path: destination .mp4; parent dirs are created on open.
+        fps: playback frame rate.
 
-    Notes
-    -----
-    If the codec/container cannot be opened, a warning is printed once and
-    further writes are silently skipped (``opened`` stays ``False``).
+    If the codec/container won't open, it warns once and silently skips further
+    writes (opened stays False).
     """
 
     def __init__(self, path: str | Path, fps: float) -> None:

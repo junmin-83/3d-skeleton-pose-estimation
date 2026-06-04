@@ -1,11 +1,7 @@
 """One-Euro filter for temporal smoothing of 3D pose keypoints.
 
-Reference:
-    Casiez, G., Roussel, N., & Vogel, D. (2012).
-    1€ Filter: A Simple Speed-based Low-pass Filter for Noisy Input in
-    Interactive Systems. CHI 2012.
-
-Units: 3-D coordinates in meters (world frame), time in seconds.
+Casiez, Roussel & Vogel, "1€ Filter", CHI 2012.
+Units: 3D coords in meters (world frame), time in seconds.
 """
 
 from __future__ import annotations
@@ -16,44 +12,27 @@ import math
 from src.core.types import NUM_KEYPOINTS, Pose3D
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _alpha(cutoff: float, freq: float) -> float:
-    """Smoothing coefficient for a first-order low-pass filter.
+    """First-order low-pass smoothing coefficient, alpha in (0, 1].
 
-    alpha = 1 / (1 + freq / (2*pi*cutoff))
-
-    Args:
-        cutoff: Filter cutoff frequency in Hz.
-        freq:   Sampling frequency in Hz (must be > 0).
-
-    Returns:
-        alpha in (0, 1].
+    alpha = 1 / (1 + freq / (2*pi*cutoff)). cutoff and freq in Hz, freq > 0.
     """
     tau = 1.0 / (2.0 * math.pi * cutoff)
     return 1.0 / (1.0 + tau * freq)
 
 
-# ---------------------------------------------------------------------------
-# Scalar One-Euro filter
-# ---------------------------------------------------------------------------
-
 class OneEuroFilter:
     """One-Euro low-pass filter for a scalar signal.
 
-    The filter adapts its cutoff frequency based on the estimated signal
-    velocity: slow motion gets heavy smoothing; fast motion gets less lag.
+    Cutoff adapts to estimated velocity: slow motion gets heavy smoothing, fast
+    motion gets less lag.
 
     Args:
-        freq:       Nominal sampling frequency in Hz (used when no timestamp
-                    is supplied, or for the very first derivative estimate).
-        min_cutoff: Minimum cutoff frequency (Hz) applied to the signal.
-                    Lower values → more smoothing at rest.
-        beta:       Speed coefficient.  Higher values reduce lag for fast
-                    motion at the cost of more jitter.
-        d_cutoff:   Cutoff frequency (Hz) for the derivative low-pass filter.
+        freq: Nominal sampling rate (Hz), used when no timestamp is given or for
+            the first derivative estimate.
+        min_cutoff: Signal min cutoff (Hz); lower means more smoothing at rest.
+        beta: Speed coefficient; higher cuts lag on fast motion but adds jitter.
+        d_cutoff: Cutoff (Hz) for the derivative low-pass.
     """
 
     def __init__(
@@ -73,28 +52,22 @@ class OneEuroFilter:
         self._dx_hat: float = 0.0
         self._t_prev: float | None = None
 
-    # ------------------------------------------------------------------
     def reset(self) -> None:
-        """Clear filter state so the next call is treated as the first sample."""
+        """Clear state so the next call is treated as the first sample."""
         self._x_prev = None
         self._dx_hat = 0.0
         self._t_prev = None
 
-    # ------------------------------------------------------------------
     def __call__(self, x: float, timestamp: float | None = None) -> float:
-        """Filter one sample.
+        """Filter one sample, returning the smoothed value.
 
         Args:
-            x:         Raw scalar value.
-            timestamp: Optional wall-clock time in seconds.  When provided the
-                       filter derives the actual sampling frequency from
-                       ``dt = timestamp - t_prev``.  Ignored on the first call
-                       (stored for next time).
-
-        Returns:
-            Smoothed scalar value.
+            x: Raw scalar value.
+            timestamp: Wall-clock time in seconds. When given, the real sampling
+                rate is derived from dt = timestamp - t_prev. Ignored on the
+                first call (just stored for next time).
         """
-        # Determine effective sampling frequency for this step.
+        # Effective sampling rate for this step.
         freq = self._freq
         if timestamp is not None and self._t_prev is not None:
             dt = timestamp - self._t_prev
@@ -103,53 +76,44 @@ class OneEuroFilter:
         if timestamp is not None:
             self._t_prev = timestamp
 
-        # First sample: initialise and return raw value.
+        # First sample: init and return raw.
         if self._x_prev is None:
             self._x_prev = x
             self._dx_hat = 0.0
             return x
 
-        # --- Derivative low-pass ---
+        # Derivative low-pass.
         dx = (x - self._x_prev) * freq
         a_d = _alpha(self._d_cutoff, freq)
         self._dx_hat = a_d * dx + (1.0 - a_d) * self._dx_hat
 
-        # --- Adaptive cutoff for the signal ---
-        # Clamp to a small positive value so a negative beta can never drive the
-        # cutoff <= 0 (which would blow up the 1/(2*pi*cutoff) time constant).
+        # Adaptive signal cutoff. Clamp positive so a negative beta can't drive
+        # cutoff <= 0 and blow up the 1/(2*pi*cutoff) time constant.
         cutoff = max(self._min_cutoff + self._beta * abs(self._dx_hat), 1e-6)
 
-        # --- Signal low-pass ---
+        # Signal low-pass.
         a = _alpha(cutoff, freq)
         x_hat = a * x + (1.0 - a) * self._x_prev
         self._x_prev = x_hat
         return x_hat
 
-    # Alias so both calling conventions work.
     def filter(self, x: float, timestamp: float | None = None) -> float:
-        """Alias for ``__call__``."""
+        """Alias for __call__, so both calling conventions work."""
         return self(x, timestamp)
 
 
-# ---------------------------------------------------------------------------
-# Per-keypoint pose smoother
-# ---------------------------------------------------------------------------
-
 class PoseSmoother:
-    """Applies one independent One-Euro filter per (keypoint, axis) coordinate.
+    """One independent One-Euro filter per (keypoint, axis) coordinate.
 
-    A (K, 3) grid of :class:`OneEuroFilter` instances is created at
-    construction.  On each frame only *valid* keypoints are updated; invalid
-    keypoints (``pose3d.valid[k] == False``) are passed through unchanged and
-    their filter state is left unmodified so it can pick up cleanly when the
-    keypoint becomes visible again.
+    Builds a (K, 3) grid of OneEuroFilter at construction. Each frame only
+    filters valid keypoints; invalid ones (valid[k] == False) pass through
+    untouched and keep their filter state, so a joint resumes cleanly when it
+    reappears.
 
     Args:
-        num_keypoints: Number of keypoints K (default: 17 for COCO-17).
-        freq:          Nominal sampling frequency in Hz.
-        min_cutoff:    One-Euro min_cutoff parameter (Hz).
-        beta:          One-Euro beta (speed coefficient).
-        d_cutoff:      One-Euro derivative low-pass cutoff (Hz).
+        num_keypoints: K (default 17 for COCO-17).
+        freq: Nominal sampling rate (Hz).
+        min_cutoff, beta, d_cutoff: One-Euro params (Hz / speed coeff / Hz).
     """
 
     def __init__(
@@ -161,7 +125,7 @@ class PoseSmoother:
         d_cutoff: float = 1.0,
     ) -> None:
         self._num_keypoints = num_keypoints
-        # Grid shape: (K, 3) — one filter per coordinate.
+        # (K, 3) grid: one filter per coordinate.
         self._filters: list[list[OneEuroFilter]] = [
             [
                 OneEuroFilter(freq=freq, min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff)
@@ -170,34 +134,32 @@ class PoseSmoother:
             for _ in range(num_keypoints)
         ]
 
-    # ------------------------------------------------------------------
     def reset(self) -> None:
         """Reset all filter states."""
         for row in self._filters:
             for f in row:
                 f.reset()
 
-    # ------------------------------------------------------------------
     def update(self, pose3d: Pose3D, timestamp: float | None = None) -> Pose3D:
-        """Smooth one frame of 3-D pose.
+        """Smooth one frame of 3D pose.
 
-        Valid keypoints are filtered; invalid ones are copied through as-is
-        without touching their filter state.
+        Valid keypoints get filtered; invalid ones are copied through as-is with
+        their filter state untouched.
 
         Args:
-            pose3d:    Input pose (K, 3) in world-frame meters.
+            pose3d: Input pose (K, 3), world-frame meters.
             timestamp: Optional wall-clock time in seconds.
 
         Returns:
-            New :class:`Pose3D` with smoothed ``points``; ``scores``,
-            ``valid``, and ``source`` are forwarded unchanged.
+            New Pose3D with smoothed points; scores, valid, source forwarded
+            unchanged.
         """
         K = self._num_keypoints
         smoothed = pose3d.points.copy()
 
         for k in range(K):
             if not pose3d.valid[k]:
-                # Pass through; do NOT update filter state for this joint.
+                # Pass through; do NOT touch this joint's filter state.
                 continue
             for axis in range(3):
                 smoothed[k, axis] = self._filters[k][axis](

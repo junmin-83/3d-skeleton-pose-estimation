@@ -1,7 +1,5 @@
-"""2D skeleton overlays on BGR frames (COCO-17).
-
-Shared by the example demos so keypoint/skeleton drawing lives in one place
-instead of being re-implemented per demo. Coordinates are pixel ``(u, v)``.
+"""2D skeleton overlays on BGR frames (COCO-17), shared by the demos so the
+drawing lives in one place. Coordinates are pixel (u, v).
 """
 
 from __future__ import annotations
@@ -25,13 +23,12 @@ def draw_skeleton_2d(
     point_radius: int = 3,
     point_color: tuple[int, int, int] = (0, 0, 255),
 ) -> np.ndarray:
-    """Draw the COCO-17 skeleton + keypoints onto a BGR ``canvas``.
+    """Draw the COCO-17 skeleton and keypoints onto a BGR canvas.
 
-    Only joints/bones whose 2D score meets ``score_thr`` are drawn. ``scale``
-    maps source-image pixels onto the canvas (e.g. when the canvas is a resized
-    panel); ``None`` draws at native coordinates. With ``copy=True`` the source
-    is left untouched and an annotated copy is returned, else ``canvas`` is
-    drawn on in place and returned.
+    Only joints/bones meeting score_thr are drawn. scale maps source-image pixels
+    onto the canvas (e.g. a resized panel); None draws at native coords. copy=True
+    leaves the source untouched and returns an annotated copy, otherwise canvas is
+    drawn on in place. Returns the drawn-on image.
     """
     out = canvas.copy() if copy else canvas
     kp = np.asarray(keypoints, dtype=float)

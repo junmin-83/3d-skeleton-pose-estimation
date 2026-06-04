@@ -1,17 +1,17 @@
 """Depth fusion: back-project aligned depth and fuse it with triangulation.
 
-The depth (RGB-D) view gives a metric ``Z`` per colour pixel. For each COCO-17
-keypoint we sample that depth, back-project the pixel to a world point, and fuse
-it with the multi-view triangulation result:
+The RGB-D view gives a metric Z per colour pixel. Per COCO-17 keypoint we sample
+that depth, back-project the pixel to a world point, and merge it with the
+multi-view triangulation result:
 
-  - both valid   -> confidence-weighted average of the two world points,
-  - only triangulation valid -> keep triangulation,
-  - only depth valid (and ``fill_missing``) -> fill from depth,
-  - neither valid -> mark missing.
+  - both valid: confidence-weighted average of the two world points
+  - only triangulation valid: keep triangulation
+  - only depth valid (and fill_missing): fill from depth
+  - neither valid: mark missing
 
-Conventions (see ``core/geometry.py``): meters; ``(u, v)`` pixel order; world is
-the reference camera frame; extrinsics ``(R, t)`` map world -> camera and are
-the depth camera's extrinsics here (depth assumed aligned to its colour stream).
+Conventions (see core/geometry.py): meters; (u, v) pixel order; world is the
+reference camera frame; extrinsics (R, t) map world to camera, here the depth
+camera's (depth assumed aligned to its colour stream).
 """
 
 from __future__ import annotations
@@ -29,15 +29,15 @@ def sample_depth(
     depth_min: float = 0.2,
     depth_max: float = 6.0,
 ) -> tuple[float, bool]:
-    """Sample a robust metric depth around pixel ``(u, v)``.
+    """Robust metric depth around pixel (u, v): median of the valid samples.
 
-    Takes the median of valid depths in the ``(2*patch_radius + 1)`` square patch
-    centred on the rounded ``(u, v)``. A depth is invalid if it is 0, NaN, inf,
-    or outside ``[depth_min, depth_max]``. Pixels outside the map are ignored.
+    Uses the (2*patch_radius + 1) square patch centred on the rounded (u, v).
+    A depth is invalid if it's 0, NaN, inf, or outside [depth_min, depth_max];
+    pixels outside the map are ignored.
 
     Returns:
-        ``(z, valid)`` where ``z`` is the median depth in meters (``nan`` if no
-        usable sample) and ``valid`` indicates whether any usable sample existed.
+        (z, valid): z is the median depth in meters (nan if no usable sample),
+        valid says whether any usable sample existed.
     """
     depth_map = np.asarray(depth_map)
     height, width = depth_map.shape[:2]
@@ -77,15 +77,14 @@ def back_project_depth_keypoints(
     """Back-project depth-view keypoints to world coordinates.
 
     Args:
-        uv: (K, 2) colour-pixel coords ``(u, v)`` for each keypoint.
+        uv: (K, 2) colour-pixel coords (u, v) per keypoint.
         depth_map: (H, W) metric depth (meters), aligned to the colour stream.
         depth_K: (3, 3) intrinsic of the (aligned) depth stream.
-        R, t: depth camera extrinsics (world -> camera).
-        patch_radius, depth_min, depth_max: forwarded to :func:`sample_depth`.
+        R, t: depth camera extrinsics (world to camera).
+        patch_radius, depth_min, depth_max: forwarded to sample_depth.
 
     Returns:
-        ``(points_world (K, 3), valid (K,))``. Rows where depth was unusable are
-        ``nan`` and flagged ``valid=False``.
+        (points_world (K, 3), valid (K,)). Unusable rows are nan and valid=False.
     """
     uv = np.asarray(uv, dtype=float).reshape(-1, 2)
     num_kpts = uv.shape[0]
@@ -113,19 +112,16 @@ def fuse(
     fill_missing: bool = True,
     depth_weight: float = 1.0,
 ) -> Pose3D:
-    """Fuse triangulation and depth back-projection into one :class:`Pose3D`.
+    """Fuse triangulation and depth back-projection into one Pose3D (new object).
 
     Per keypoint:
-      * both triangulation and depth valid -> confidence-weighted average of the
-        two world points (weights ``triangulated.scores[k]`` and
-        ``depth_scores[k] * depth_weight``); ``source='fused'``, combined score.
-      * triangulation valid, depth invalid -> keep triangulation;
-        ``source='triangulation'``.
-      * triangulation invalid, depth valid, and ``fill_missing`` -> use the depth
-        point; ``source='depth'``, ``valid=True``.
-      * otherwise -> ``valid=False``, ``source='missing'``.
-
-    A new :class:`Pose3D` is returned; the input is not mutated.
+      * both valid: confidence-weighted average of the two world points (weights
+        triangulated.scores[k] and depth_scores[k] * depth_weight),
+        source='fused', combined score.
+      * triangulation valid, depth invalid: keep triangulation, source='triangulation'.
+      * triangulation invalid, depth valid, fill_missing: use the depth point,
+        source='depth', valid=True.
+      * else: valid=False, source='missing'.
     """
     tri_points = np.asarray(triangulated.points, dtype=float).reshape(-1, 3)
     tri_scores = np.asarray(triangulated.scores, dtype=float).reshape(-1)

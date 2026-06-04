@@ -1,8 +1,8 @@
-"""TUM RGB-D dataset as an :class:`RGBDSource`.
+"""TUM RGB-D dataset as an RGBDSource.
 
-Associates each colour frame with its nearest-timestamp depth frame and yields
-aligned RGB-D frames. Intrinsics + depth scale are the freiburg3 defaults
-(fx=535.4, fy=539.2, cx=320.1, cy=247.6; raw_depth / 5000 = meters).
+Pairs each colour frame with its nearest-timestamp depth frame. Intrinsics and
+depth scale are the freiburg3 defaults: fx=535.4, fy=539.2, cx=320.1, cy=247.6;
+raw_depth / 5000 = meters.
 """
 
 from __future__ import annotations
@@ -15,15 +15,14 @@ import numpy as np
 
 from src.io.sources.rgbd_source import RGBDFrame, RGBDSource
 
-# TUM freiburg3 RGB intrinsics + depth scale (raw / scale = meters).
+# freiburg3 RGB intrinsics; raw / depth_scale = meters.
 _TUM_FR3 = dict(fx=535.4, fy=539.2, cx=320.1, cy=247.6, depth_scale=5000.0)
 
 
 def read_tum_assoc(tum_dir: Path, tolerance_s: float = 0.02) -> list[tuple[str, str]]:
-    """Associate each RGB frame with the nearest-timestamp depth frame.
+    """Pair each RGB frame with its nearest depth frame within tolerance_s seconds.
 
-    Returns a list of ``(rgb_filename, depth_filename)`` pairs whose timestamps
-    differ by at most ``tolerance_s`` seconds.
+    Returns (rgb_filename, depth_filename) pairs read from rgb.txt and depth.txt.
     """
     def load(name: str) -> list[tuple[float, str]]:
         out = []

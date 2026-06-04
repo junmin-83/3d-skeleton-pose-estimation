@@ -1,16 +1,16 @@
-"""End-to-end orchestration: 2D detection -> triangulation -> depth fusion ->
-temporal smoothing -> 3D skeleton output.
+"""End-to-end pipeline: 2D detection, triangulation, depth fusion, temporal
+smoothing, 3D skeleton output.
 
-Confidence flows through the whole chain: the 2D ``score`` of each keypoint is
-used both as a triangulation weight (per view) and as a depth-fusion weight, so
-occluded/low-score joints are automatically down-weighted (SPEC §5.3).
+Confidence flows through the whole chain: each keypoint's 2D score is used as both
+a per-view triangulation weight and a depth-fusion weight, so occluded/low-score
+joints get down-weighted automatically (SPEC §5.3).
 
-Distortion handling (documented design decision, SPEC §8.3): detected pixels are
-undistorted with ``cv2.undistortPoints`` before triangulation, because ``P``
-uses the pinhole model. Depth is assumed aligned to a rectified colour grid, so
-the same undistorted pixels are used to sample the depth map and back-project.
-For synthetic data (dist = 0) undistortion is the identity. A concrete RGB-D SDK
-backend may refine this if its aligned depth lives in the distorted grid.
+Distortion handling (design decision, SPEC §8.3): pixels are undistorted with
+cv2.undistortPoints before triangulation because P is a pinhole model. Depth is
+assumed aligned to a rectified colour grid, so the same undistorted pixels sample
+the depth map and back-project. For synthetic data (dist = 0) undistortion is a
+no-op. A real RGB-D SDK backend may need to revisit this if its aligned depth
+lives in the distorted grid.
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ class Pipeline:
         return self._detector
 
     def detect_2d(self, frameset) -> tuple[np.ndarray, np.ndarray]:
-        """Run 2D pose on every view of a FrameSet -> (V,K,2) px, (V,K) scores."""
+        """Run 2D pose on every view of a FrameSet. Returns (V,K,2) px, (V,K) scores."""
         detector = self._detector_lazy()
         n_views = len(self.cameras)
         keypoints = np.zeros((n_views, NUM_KEYPOINTS, 2), dtype=float)
@@ -123,19 +123,19 @@ class Pipeline:
         depth_map: np.ndarray | None = None,
         timestamp: float | None = None,
     ) -> Pose3D:
-        """Reconstruct one frame's 3D pose from per-view 2D + optional depth.
+        """Reconstruct one frame's 3D pose from per-view 2D plus optional depth.
 
-        The reconstruction strategy is chosen by the available inputs:
-          - **multi-view triangulation** when ``>= min_views`` camera views are
-            configured (confidence-weighted DLT + robust view rejection);
-          - **depth-only back-projection** when fewer views exist (e.g. a single
+        Strategy depends on the inputs:
+          - multi-view triangulation when >= min_views are configured
+            (confidence-weighted DLT plus robust view rejection);
+          - depth-only back-projection when fewer views exist (e.g. a single
             RGB-D camera, world == camera) and a depth map is supplied;
-          - **hybrid**: the triangulation result is fused with the depth view's
+          - hybrid: fuse the triangulation result with the depth view's
             back-projected points when both are available.
 
         Args:
-            keypoints_per_view: (V,K,2) detected pixels (u,v), view order ==
-                ``self.cameras``.
+            keypoints_per_view: (V,K,2) detected pixels (u,v), view order matches
+                self.cameras.
             scores_per_view: (V,K) confidence in [0,1].
             depth_map: (H,W) metric depth (meters) for the depth camera, or None.
             timestamp: optional capture time (seconds) for One-Euro smoothing.
@@ -164,8 +164,8 @@ class Pipeline:
             )
             # Gate depth by the depth view's 2D confidence: an occluded joint's
             # garbage pixel can land on valid background depth, so a low 2D score
-            # must invalidate that depth sample too (SPEC §5.3/§5.4). Without this
-            # gate, fill_missing would accept the spurious back-projected point.
+            # has to invalidate that depth sample too (SPEC §5.3/§5.4). Without
+            # this, fill_missing would accept the spurious back-projected point.
             depth_scores = scores_per_view[self.depth_idx]
             depth_valid = depth_valid & (depth_scores >= self.score_threshold)
             result = fuse(

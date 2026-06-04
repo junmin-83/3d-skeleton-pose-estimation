@@ -1,15 +1,14 @@
-"""실제 RGB-D 영상에서 Depth를 활용해 3D pose를 추출하고 MP4로 만드는 데모.
+"""단일 RGB-D(컬러 + 정렬 depth)로 depth 기반 3D pose를 뽑아 MP4로 저장하는 데모.
 
-단일 RGB-D 카메라(컬러 + 정렬된 depth)에서:
-  RTMPose로 컬러 프레임의 COCO-17 2D 키포인트를 검출(실제 픽셀) →
-  각 키포인트 위치의 depth를 읽어 back-projection(`fusion.back_project_depth_keypoints`)으로 3D 복원 →
-  [컬러+2D | depth 컬러맵 | 3D 스켈레톤] 3분할 MP4 저장.
-삼각측량 없이 **depth 정보만으로** 3D를 만드는 경로다(단일 카메라 → world = 카메라 좌표계).
+컬러에 RTMPose를 돌려 COCO-17 2D를 얻고, 각 키포인트 위치의 depth를
+back_project_depth_keypoints로 back-projection해 3D를 복원한다. 삼각측량 없이
+depth만 쓰는 경로(단일 카메라라 world == 카메라 좌표계). 출력:
+[컬러+2D | depth 컬러맵 | 3D 스켈레톤] 3분할 MP4.
 
-지원 입력:
-  --tum <dir>   TUM RGB-D 포맷 (rgb/*.png + depth/*.png(16bit) + rgb.txt/depth.txt)
+입력은 둘 중 하나:
+  --tum <dir>   TUM RGB-D 포맷 (rgb/*.png + depth/*.png 16bit + rgb.txt/depth.txt)
                 예: data/tum/rgbd_dataset_freiburg3_sitting_static
-  --realsense   Intel RealSense 라이브(pyrealsense2 필요; 컬러에 정렬된 depth + intrinsics 자동)
+  --realsense   Intel RealSense 라이브 (pyrealsense2 필요; 정렬 depth + intrinsics 자동)
 
 Usage::
 
@@ -42,7 +41,7 @@ from src.render.skeleton_2d import draw_skeleton_2d, label_panel  # noqa: E402
 from src.render.skeleton_3d import render_pose3d_frame  # noqa: E402
 from src.render.video_writer import LazyVideoWriter  # noqa: E402
 
-PW, PH = 320, 240  # per-panel size
+PW, PH = 320, 240  # 패널 하나 크기
 
 
 def depth_panel(depth_m, kpts, scores, thr, dmin, dmax):
@@ -82,10 +81,9 @@ def main() -> None:
         sys.exit(1)
 
     detector = RTMPoseDetector(device=args.device, mode=args.mode, score_threshold=0.3)
-    # Single RGB-D camera: world == camera (R=I, t=0). The 3D reconstruction
-    # (depth back-projection + 2D-confidence gating + One-Euro smoothing) is the
-    # Pipeline's depth path; the camera is built lazily once the first frame's
-    # intrinsic K is known (K is constant per source).
+    # 단일 RGB-D라 world == camera (R=I, t=0). 3D 복원(depth back-projection +
+    # 2D confidence gating + One-Euro smoothing)은 Pipeline의 depth 경로가 처리한다.
+    # 카메라는 첫 프레임에서 intrinsic K가 나온 뒤 lazy로 만든다(K는 소스마다 고정).
     config = {
         "triangulation": {"score_threshold": 0.3, "min_views": 2},
         "depth_fusion": {"enabled": True, "fill_missing": True, "patch_radius_px": 2,
