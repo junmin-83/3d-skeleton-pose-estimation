@@ -185,6 +185,16 @@ class RTMPoseDetector:
 
         import rtmlib as _rtmlib
 
+        if device == "cuda":
+            # Load CUDA/cuDNN DLLs from the nvidia-*-cu12 pip wheels so
+            # onnxruntime-gpu's CUDAExecutionProvider can initialize. Harmless
+            # no-op on CPU-only onnxruntime; falls back to CPU if unavailable.
+            try:
+                import onnxruntime as _ort
+                _ort.preload_dlls()
+            except Exception:
+                pass
+
         self.score_threshold = score_threshold
         self.device = device
 
