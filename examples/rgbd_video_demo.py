@@ -33,15 +33,14 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.core.types import NUM_KEYPOINTS, Pose3D  # noqa: E402
-from src.fusion.depth_fusion import back_project_depth_keypoints  # noqa: E402
+from src.core.types import DepthCameraParams  # noqa: E402
 from src.io.sources.realsense import RealSenseSource  # noqa: E402
 from src.io.sources.tum import TUMSource  # noqa: E402
+from src.pipeline import Pipeline  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
 from src.render.skeleton_2d import draw_skeleton_2d, label_panel  # noqa: E402
 from src.render.skeleton_3d import render_pose3d_frame  # noqa: E402
 from src.render.video_writer import LazyVideoWriter  # noqa: E402
-from src.smoothing.one_euro import PoseSmoother  # noqa: E402
 
 PW, PH = 320, 240  # per-panel size
 
@@ -83,7 +82,18 @@ def main() -> None:
         sys.exit(1)
 
     detector = RTMPoseDetector(device=args.device, mode=args.mode, score_threshold=0.3)
-    smoother = PoseSmoother(NUM_KEYPOINTS, freq=args.fps, min_cutoff=1.0, beta=0.01, d_cutoff=1.0)
+    # Single RGB-D camera: world == camera (R=I, t=0). The 3D reconstruction
+    # (depth back-projection + 2D-confidence gating + One-Euro smoothing) is the
+    # Pipeline's depth path; the camera is built lazily once the first frame's
+    # intrinsic K is known (K is constant per source).
+    config = {
+        "triangulation": {"score_threshold": 0.3, "min_views": 2},
+        "depth_fusion": {"enabled": True, "fill_missing": True, "patch_radius_px": 2,
+                         "depth_min": args.depth_min, "depth_max": args.depth_max},
+        "smoothing": {"enabled": True, "freq": args.fps, "min_cutoff": 1.0,
+                      "beta": 0.01, "d_cutoff": 1.0},
+    }
+    pipe = None
     fig = plt.figure(figsize=(PW / 100, PH / 100), dpi=100)
     ax = fig.add_subplot(111, projection="3d")
     writer = LazyVideoWriter(args.video, args.fps)
@@ -92,17 +102,14 @@ def main() -> None:
 
     n = 0
     for color, depth_m, K in frames:
+        if pipe is None:
+            h, w = color.shape[:2]
+            cam = DepthCameraParams(name="rgbd", K=K, dist=np.zeros(5), R=np.eye(3),
+                                    t=np.zeros(3), image_size=(w, h), depth_K=K)
+            pipe = Pipeline(config, [cam])
         pose2d = detector.detect_best(color)
-        pts3d, valid = back_project_depth_keypoints(
-            pose2d.keypoints, depth_m, K, np.eye(3), np.zeros(3),
-            patch_radius=2, depth_min=args.depth_min, depth_max=args.depth_max,
-        )
-        # Gate by 2D confidence: a low-score (e.g. undetected) joint whose pixel
-        # happens to land on valid background depth must NOT yield a 3D point
-        # (prevents a "ghost skeleton" when no person is present).
-        valid = valid & (pose2d.scores >= detector.score_threshold)
-        pose = smoother.update(Pose3D(pts3d, pose2d.scores, valid, ["depth"] * NUM_KEYPOINTS),
-                               timestamp=n / args.fps)
+        pose = pipe.process(pose2d.keypoints[np.newaxis], pose2d.scores[np.newaxis],
+                            depth_map=depth_m, timestamp=n / args.fps)
         if lims is None and pose.valid.any():
             c = pose.points[pose.valid].mean(axis=0)
             lims = [(c[a] - 0.8, c[a] + 0.8) for a in range(3)]

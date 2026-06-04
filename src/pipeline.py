@@ -26,6 +26,13 @@ from src.smoothing.one_euro import PoseSmoother
 from src.triangulation.robust import triangulate_robust
 
 
+def _empty_pose() -> Pose3D:
+    """An all-invalid Pose3D placeholder (no joint reconstructed yet)."""
+    k = NUM_KEYPOINTS
+    return Pose3D(points=np.zeros((k, 3)), scores=np.zeros(k),
+                  valid=np.zeros(k, dtype=bool), source=["none"] * k)
+
+
 class Pipeline:
     """Configurable hybrid 3D-pose pipeline for a single person."""
 
@@ -118,6 +125,14 @@ class Pipeline:
     ) -> Pose3D:
         """Reconstruct one frame's 3D pose from per-view 2D + optional depth.
 
+        The reconstruction strategy is chosen by the available inputs:
+          - **multi-view triangulation** when ``>= min_views`` camera views are
+            configured (confidence-weighted DLT + robust view rejection);
+          - **depth-only back-projection** when fewer views exist (e.g. a single
+            RGB-D camera, world == camera) and a depth map is supplied;
+          - **hybrid**: the triangulation result is fused with the depth view's
+            back-projected points when both are available.
+
         Args:
             keypoints_per_view: (V,K,2) detected pixels (u,v), view order ==
                 ``self.cameras``.
@@ -130,11 +145,15 @@ class Pipeline:
              for i in range(len(self.cameras))]
         )
 
-        result = triangulate_robust(
-            undist, scores_per_view, self.proj_matrices,
-            score_threshold=self.score_threshold, min_views=self.min_views,
-            ransac=self.ransac, reproj_threshold_px=self.reproj_threshold_px,
-        )
+        if len(self.cameras) >= self.min_views:
+            result = triangulate_robust(
+                undist, scores_per_view, self.proj_matrices,
+                score_threshold=self.score_threshold, min_views=self.min_views,
+                ransac=self.ransac, reproj_threshold_px=self.reproj_threshold_px,
+            )
+        else:
+            # Too few views to triangulate; the depth path below reconstructs.
+            result = _empty_pose()
 
         if self.fusion_enabled and depth_map is not None and self.depth_idx is not None:
             dcam = self.cameras[self.depth_idx]
