@@ -101,8 +101,10 @@ uv sync          # pyproject.toml + uv.lock 의 고정 버전 그대로 설치
 `examples/realtime_demo.py` 는 단일 RGB(이미지/웹캠)에서 실제 RTMPose로 17개 키포인트를 프레임마다
 뽑아 FPS·좌표를 출력하고, 스켈레톤 오버레이 MP4와 마지막 프레임 PNG를 저장합니다.
 
-**① 데이터 준비**: 사람이 있는 사진 1장(웹캠을 쓰면 이 단계 생략):
+**① 데이터 준비**: 사람이 있는 사진 1장(웹캠을 쓰면 이 단계 생략). `data/`는 새로 clone하면
+없으므로 폴더부터 만듭니다(`curl -o`는 폴더를 안 만듭니다):
 ```bash
+mkdir -p data/demo                          # Windows PowerShell: mkdir data\demo
 curl -sSL -o data/demo/person.jpg "https://raw.githubusercontent.com/open-mmlab/mmpose/main/tests/data/coco/000000000785.jpg"
 ```
 
