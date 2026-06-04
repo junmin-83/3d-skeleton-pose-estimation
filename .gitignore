@@ -20,7 +20,8 @@ data/
 .omc/
 .bkit/
 .claude/
-progress.txt        # Ralph iteration log (process artifact, not product)
+# Ralph iteration log (process artifact, not product)
+progress.txt
 
 # --- OS / editor cruft ---
 .DS_Store
