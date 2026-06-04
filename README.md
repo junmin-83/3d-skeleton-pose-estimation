@@ -216,18 +216,34 @@ uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pos
 (`Pipeline`의 `fuse`, `source='fused'`)는 "캘리브레이션된 다중 RGB 뷰 + 정렬 depth"를 동시에
 주는 공개 단일 데이터셋이 없어 실영상 데모에는 빠져 있습니다(TUM=단일 RGB-D, Panoptic=Kinect
 depth 미디코딩). 이 데모는 그 셋업을 **합성**으로 구성해 fused 경로를 눈으로 보여줍니다.
+출력: `[cam0 RGB+2D | cam1 RGB+2D | RGB-D depth+2D | 3D(출처색)]` 4분할 MP4.
 
-**실행** (다운로드·rtmlib·GPU 불필요, 오프라인 결정론적):
+> 이 경로는 **합성 기하 데모**입니다(알려진 3D를 투영해 입력을 만들므로 RTMPose 미사용).
+> 실픽셀 + 실depth 융합은 멀티뷰 RGB와 정렬 depth를 한 좌표계로 묶어야 하며(예: Panoptic
+> Kinect depth 디코딩·동기·정렬), 그건 별도 작업입니다 — 미구현.
+
+**① 데이터 준비** — **없음**. 합성이라 데이터셋 다운로드·모델 캐시·GPU가 모두 불필요하고
+오프라인에서 결정론적으로 실행됩니다(rtmlib도 import 안 함). 바로 ②로 가세요.
+
+**② 실행** (OS 공통):
 ```bash
+# 다운로드·rtmlib·GPU 불필요 · 짧게 보려면 --num-frames 20 · CPU/GPU 무관
 uv run python examples/fusion_demo.py --num-frames 80
 ```
 
-- 2 RGB + 1 RGB-D 카메라를 한 world 좌표계에 두고, 알려진 3D COCO-17(팔 흔들기)을 각 뷰에
-  투영해 2D+score와 RGB-D용 정렬 depth 맵을 만든 뒤 **진짜 `Pipeline`** 에 넣습니다.
-- 산출물 `output/fusion_pose3d.mp4`: `[cam0 2D | cam1 2D | Depth+2D | 3D(출처색)]` 4분할.
-  3D 관절은 출처로 색 구분 — **fused(초록)** 삼각측량+depth 평균 / **depth(파랑)** RGB 양쪽서
-  가려진(score↓) 오른손목을 depth가 보완 / **triangulation(빨강)** depth 맵에 구멍 난 왼발목을
-  RGB 삼각측량만으로 복원. 콘솔에 10프레임마다 `fused=… depth=… tri=… missing=…` 출력.
+- 산출물: `output/fusion_pose3d.mp4`. 콘솔에 10프레임마다 `fused=… depth=… tri=… missing=…`
+  (관절 출처별 개수) 출력. 기본 시나리오는 매 프레임 `fused=15 depth=1 tri=1 missing=0`.
+- **합성 셋업:** RGB 2대(`cam0` 원점, `cam1` 기준선 0.6 m) + RGB-D 1대(`cam2`, 0.3 m)를 한
+  world 좌표계에 배치(공통 intrinsics fx=fy=600, 640×480). 알려진 3D COCO-17(오른팔 흔들기 +
+  좌우 sway)을 각 뷰에 투영해 per-view 2D+score를, RGB-D용으로 정렬 depth 맵을 만든 뒤
+  **진짜 `Pipeline`**(삼각측량+RANSAC → depth fusion → One-Euro 스무딩)에 그대로 넣습니다.
+- **출처 색 구분(3D 패널)** — 융합의 핵심을 한 장면에서 보여주려 관절별 출처를 색으로 구분:
+  - **fused(초록):** 두 RGB 뷰 + depth 모두 유효 → confidence 가중 평균(대부분 관절).
+  - **depth(파랑):** 두 RGB 뷰에서 가려진(score↓) **오른손목**을 depth가 보완 → README 제목의
+    "가려진 관절 보완". RGB 패널엔 손목이 안 그려지고 depth 패널엔 그려지는 걸로 확인됩니다.
+  - **triangulation(빨강):** depth 맵에 구멍 난 **왼발목**을 RGB 삼각측량만으로 복원.
+- 옵션: `--num-frames N`(길이) · `--fps`(One-Euro 주파수 겸 재생 속도) · `--depth-min/--depth-max`
+  (유효 depth 범위, m) · `--video <경로>`(출력 MP4).
 
 ---
 
