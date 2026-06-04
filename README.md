@@ -287,7 +287,12 @@ uv run python run.py --live --max-frames 300 # N프레임 처리 후 정지
 ## (참고) 파이프라인 인프로세스 사용 (후속 개발용)
 
 후속 프로그램에 3D 결과를 넘기는 가장 간단한 방법은, 파일을 거치지 않고 파이프라인을 import해서
-`Pipeline.process(...)`가 돌려주는 `Pose3D`를 바로 쓰는 것입니다.
+`Pipeline.process(...)`가 돌려주는 `Pose3D`를 바로 쓰는 것입니다. 바로 실행 가능한 예제가 있습니다
+(합성 2뷰로 아래 패턴을 오프라인 시연, rtmlib 불필요):
+
+```bash
+uv run python examples/consume_pose3d.py
+```
 
 ```python
 import numpy as np
@@ -362,6 +367,7 @@ examples/
   realtime_demo.py               (2) 실시간 2D 17키포인트 추출 (실제 RTMPose, MP4)
   rgbd_video_demo.py             (3-A) RGB-D depth 활용 3D → MP4
   panoptic_video_demo.py         (3-B) 멀티뷰 HD 삼각측량 3D → MP4
+  consume_pose3d.py              인프로세스로 Pose3D 소비하는 최소 예제 (합성, 오프라인)
 run.py                           실제 라이브/녹화 멀티뷰 엔트리포인트
 tests/                           수치 모듈 단위/통합 테스트
 data/, models/, output/          (gitignore) 데이터셋 / 모델 캐시 / 산출물
