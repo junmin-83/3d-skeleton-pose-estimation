@@ -26,6 +26,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -37,14 +38,31 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # for panoptic_demo helpers
 
-from panoptic_demo import load_panoptic_hd_cameras  # noqa: E402
-from src.core.types import COCO_SKELETON  # noqa: E402
+from src.core.types import COCO_SKELETON, CameraParams  # noqa: E402
 from src.pipeline import Pipeline  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
 
 PW, PH = 360, 240
+_CM_TO_M = 0.01  # CMU Panoptic calibration is in centimeters
+
+
+def load_panoptic_hd_cameras(calib_path: str) -> list[CameraParams]:
+    """CMU Panoptic calibration JSON -> CameraParams (HD cams only, cm -> m)."""
+    doc = json.load(open(calib_path, encoding="utf-8"))
+    cams = []
+    for c in doc["cameras"]:
+        if c["type"] != "hd":
+            continue
+        cams.append(CameraParams(
+            name=c["name"],
+            K=np.asarray(c["K"], float),
+            dist=np.asarray(c["distCoef"], float),
+            R=np.asarray(c["R"], float),
+            t=np.asarray(c["t"], float).reshape(3) * _CM_TO_M,
+            image_size=(int(c["resolution"][0]), int(c["resolution"][1])),
+        ))
+    return cams
 
 
 def draw_2d(canvas, kpts, scores, cam_size, thr):

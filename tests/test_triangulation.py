@@ -218,3 +218,19 @@ def test_min_views_marks_keypoint_invalid():
     assert pose.scores[lonely] == 0.0
     # Every other keypoint is still valid.
     assert pose.valid.sum() == NUM_KEYPOINTS - 1
+
+
+def test_dlt_zero_weights_returns_nan_and_robust_drops_joint():
+    """All-zero weights carry no constraint -> NaN; robust marks the joint missing."""
+    K = np.array([[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
+    p_a = build_projection_matrix(K, np.eye(3), np.zeros(3))
+    p_b = build_projection_matrix(K, np.eye(3), np.array([0.5, 0.0, 0.0]))
+    obs = np.array([[640.0, 360.0], [600.0, 360.0]])
+
+    pt = triangulate_point_dlt(obs, [p_a, p_b], weights=np.array([0.0, 0.0]))
+    assert not np.isfinite(pt).all()
+
+    pose = triangulate_robust(obs[:, None, :], np.array([[0.0], [0.0]]),
+                              [p_a, p_b], score_threshold=0.0, min_views=2)
+    assert not pose.valid[0]
+    assert pose.source[0] == "missing"

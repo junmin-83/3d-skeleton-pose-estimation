@@ -222,3 +222,12 @@ class TestPoseSmoother:
             assert not out.valid[INVALID_KP], (
                 "valid flag for invalid keypoint was changed."
             )
+
+
+def test_rejects_nonpositive_cutoff():
+    """Non-positive freq/cutoff must be rejected (guards 1/(2*pi*cutoff))."""
+    from src.smoothing.one_euro import OneEuroFilter
+
+    for kwargs in ({"min_cutoff": 0.0}, {"freq": 0.0}, {"d_cutoff": -1.0}):
+        with pytest.raises(ValueError):
+            OneEuroFilter(**kwargs)

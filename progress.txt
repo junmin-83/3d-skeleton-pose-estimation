@@ -62,3 +62,21 @@ invariants correct AND found 3 genuine latent edge-case bugs -> all fixed + test
      ValueError (src/core/geometry.py).
 - Added 3 tests (test_geometry partial-extrinsics, test_pipeline zero-weight + one-euro guard).
 - Post-fix regression: 92 passed, 1 skipped; ruff clean; synthetic 8.7e-9 m. FULLY DONE.
+
+(iteration 6) README 3-섹션 정리 + 합성 제거 + 실제 RGB-D depth 데모 추가.
+- 결정: 합성 데모/예제 + src/synthetic.py + run.py --synthetic 제거(단위테스트 유지);
+  #3 depth는 단일 RGB-D(TUM/RealSense)로 신규 데모 구현(Panoptic은 RGB 삼각측량 유지).
+- US-001: 삭제 src/synthetic.py, examples/{pose3d_video,hybrid_3cam_demo,panoptic_demo}.py,
+  tests/test_pipeline.py; run.py 실제전용(run_live)화.
+- US-002: examples/rgbd_video_demo.py 신규 — 단일 RGB-D RTMPose 2D + back_project_depth_keypoints
+  (R=I,t=0, world=camera) -> 3D, [RGB+2D|depth|3D] MP4. RealSense(--realsense) + TUM 포맷.
+  실제 TUM sitting_static 40프레임 17/17 joints 검증.
+- US-003: README 3섹션(환경/2D/3D-depth) 재작성, 합성 언급 0.
+- 버그수정(panoptic_video_demo): 삭제된 panoptic_demo import -> load_panoptic_hd_cameras 인라인.
+- CCG: architect APPROVED. Gemini+Codex 공통 'no-person ghost skeleton' -> valid을 2D score로 게이팅.
+  Codex: _realsense_frames 프레임 None 가드. README 로그주기/단일인물 노트 수정.
+- test_pipeline 삭제 시 딸려간 비합성 가드 테스트 2개(zero-weight DLT, one-euro 검증)를
+  test_triangulation/test_one_euro로 재배치 -> 커버리지 유지.
+- 최종: 84 passed/1 skipped, ruff(F,E9) clean, rgbd 데모 17/17 from depth. FULLY DONE.
+- LEARNING: 합성 단위테스트는 src/synthetic.py 미의존(내부 인라인 생성). TUM fr3 intrinsics
+  fx=535.4 fy=539.2 cx=320.1 cy=247.6, depth/5000=m. 단일 RGB-D 3D = depth back-projection만.
