@@ -1,8 +1,15 @@
-# 3D Skeleton Pose Estimation — pinned dependencies
-# Install:  uv venv --python 3.11  &&  uv pip install -r requirements.txt
+# 3D Skeleton Pose Estimation — pinned dependencies (GPU / NVIDIA CUDA)
+#
+# GPU pip-install path (Windows x86_64 + NVIDIA CUDA 12). For the cross-platform,
+# fully reproducible setup use uv instead (README §1): `uv sync`.
+#
+# Install (GPU):
+#   pip install -r requirements.txt
+#   pip uninstall -y onnxruntime   # rtmlib pulls in the CPU build; if kept it
+#                                  # shares the onnxruntime/ folder and disables CUDA.
 # (rtmlib downloads RTMPose ONNX models from the internet on first run.)
 
-# --- Geometry / numerics (required for the full numerical pipeline & tests) ---
+# --- Geometry / numerics (full numerical pipeline & tests) ---
 numpy>=1.24,<3.0
 scipy>=1.10,<2.0
 opencv-python>=4.8,<5.0
@@ -12,11 +19,16 @@ matplotlib>=3.7,<4.0
 # --- 2D keypoint detection (RTMPose via rtmlib; NO mmcv/mmpose/mmdet) ---
 rtmlib>=0.0.13
 
-# --- Inference backend ---
-# GPU (default). Requires a CUDA-capable NVIDIA GPU + matching CUDA/cuDNN.
-onnxruntime-gpu>=1.16
-# CPU fallback — uncomment this and comment out onnxruntime-gpu if no GPU:
-# onnxruntime>=1.16
+# --- Inference backend: NVIDIA CUDA GPU ---
+# cuDNN pinned <9.12: 9.12+ (e.g. 9.23) breaks onnxruntime 1.26's CUDA provider
+# (CUDNN_BACKEND_API_FAILED -> silent CPU fallback). Verified working: 9.11.1.4.
+onnxruntime-gpu>=1.26,<2.0
+nvidia-cudnn-cu12>=9.11,<9.12
+nvidia-cublas-cu12
+nvidia-cuda-runtime-cu12
+nvidia-cufft-cu12
+nvidia-curand-cu12
+nvidia-cuda-nvrtc-cu12
 
 # --- Testing ---
 pytest>=7.4

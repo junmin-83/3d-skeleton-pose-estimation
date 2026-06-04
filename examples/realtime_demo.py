@@ -6,8 +6,9 @@ timing (FPS), prints the 17 keypoints of the last frame, and writes an annotated
 either a live webcam (``--camera <idx>``) or a static image looped ``--frames``
 times to emulate a stream (default).
 
-Requires ``rtmlib`` + ``onnxruntime`` (see requirements.txt); rtmlib downloads
-the RTMPose ONNX model on first run. Exits with a clear message if unavailable.
+Requires ``rtmlib`` + ``onnxruntime-gpu`` (see requirements.txt; CPU onnxruntime
+also works); rtmlib downloads the RTMPose ONNX model on first run. Exits with a
+clear message if unavailable.
 
 Usage::
 
