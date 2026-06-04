@@ -45,11 +45,36 @@ uv sync          # pyproject.toml + uv.lock 의 고정 버전 그대로 설치
 
 ---
 
+## 데모 실행 — 공통 안내
+
+`examples/` 폴더의 데모 3개는 모두 **프로젝트 루트에서** `uv run python examples/<파일>.py ...` 로 실행합니다.
+
+- `uv run` 이 환경을 자동 동기화하므로 `uv sync` 를 깜빡해도 됩니다.
+- **첫 실행 시** RTMPose ONNX 모델이 `./models/hub/checkpoints/` 에 자동 다운로드됩니다(수십 초, 1회).
+- 결과물은 모두 `output/` 에 저장됩니다(`.gitignore` 대상 — 지워도 데모 재실행 시 다시 생성).
+- 공통 옵션: `--device cpu`(기본) 또는 `--device cuda`(GPU), `--num-frames N`(길이·속도 조절).
+
+| # | 데모 | 스크립트 | 입력 준비물 | 한 줄 실행 예 | 산출물 |
+|---|---|---|---|---|---|
+| 2 | 실시간 2D 키포인트 | `examples/realtime_demo.py` | 사람 사진 1장(소) 또는 웹캠 | `uv run python examples/realtime_demo.py --frames 30` | `output/realtime_keypoints.mp4` |
+| 3-A | RGB-D depth 3D | `examples/rgbd_video_demo.py` | RGB-D 영상(TUM ~422MB) 또는 RealSense | `uv run python examples/rgbd_video_demo.py --tum <dir> --num-frames 60` | `output/rgbd_pose3d.mp4` |
+| 3-B | 멀티뷰 HD 3D | `examples/panoptic_video_demo.py` | Panoptic HD 3대(~8.6GB) | `uv run python examples/panoptic_video_demo.py --seq-dir <dir> --cams 00_03,00_12,00_23` | `output/panoptic_video_pose3d.mp4` |
+
+> **가장 빠른 시작은 2번**입니다(사람 사진 1장만 받으면 끝). 3-A·3-B는 데이터 다운로드가 필요하며, 각 섹션의 **① 데이터 준비 → ② 실행** 순서를 따르세요.
+
+---
+
 ## 2. 실시간 2D pose 추출 데모 (RGB → COCO-17 17개)
 
 `examples/realtime_demo.py` — 단일 RGB(이미지/웹캠)에서 **실제 RTMPose**로 17개 키포인트를 프레임마다
 추출하고, FPS·좌표를 출력하며 스켈레톤 오버레이 **MP4** + 마지막 프레임 PNG를 저장합니다.
 
+**① 데이터 준비** — 사람이 있는 사진 1장(웹캠을 쓰면 이 단계 생략):
+```bash
+curl -sSL -o data/demo/person.jpg "https://raw.githubusercontent.com/open-mmlab/mmpose/main/tests/data/coco/000000000785.jpg"
+```
+
+**② 실행**
 ```bash
 # (a) 정적 이미지를 스트림처럼 반복 — 가장 간단
 uv run python examples/realtime_demo.py --frames 30
@@ -58,13 +83,8 @@ uv run python examples/realtime_demo.py --frames 30
 # (b) 실제 웹캠 라이브 (장치 0번, 200프레임)
 uv run python examples/realtime_demo.py --camera 0 --frames 200
 
-# (c) GPU 고속 (NVIDIA + onnxruntime-gpu, 30+ FPS)
+# (c) GPU 고속 (onnxruntime-gpu 설치 시, 30+ FPS)
 uv run python examples/realtime_demo.py --camera 0 --device cuda --mode balanced
-```
-
-```bash
-# 데모용 샘플 사진(사람이 있는 임의 이미지면 가능)
-curl -sSL -o data/demo/person.jpg "https://raw.githubusercontent.com/open-mmlab/mmpose/main/tests/data/coco/000000000785.jpg"
 ```
 
 옵션: `--image <경로>` · `--mode lightweight|balanced|performance` · `--score-thr <0~1>`(올리면
@@ -82,23 +102,26 @@ curl -sSL -o data/demo/person.jpg "https://raw.githubusercontent.com/open-mmlab/
 단일 RGB-D(컬러 + 정렬 depth)에서 RTMPose 2D를 검출하고, **각 관절의 depth를 back-projection**해
 3D를 복원합니다(삼각측량 없이 depth만으로). 출력: `[RGB+2D | depth 컬러맵 | 3D 스켈레톤]` MP4.
 
-검증용 공개 RGB-D 영상(TUM, ~422MB) 받기:
+**① 데이터 준비** — 공개 RGB-D 영상(TUM sitting_static, ~422MB) 다운로드 + 압축 해제.
 
-**Windows PowerShell**
+Windows PowerShell:
 ```powershell
 New-Item -ItemType Directory -Force data\tum | Out-Null
 curl.exe -L -o data\tum\sitting_static.tgz "https://cvg.cit.tum.de/rgbd/dataset/freiburg3/rgbd_dataset_freiburg3_sitting_static.tgz"
 tar -xzf data\tum\sitting_static.tgz -C data\tum
-uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 60 --device cuda
 ```
 
-**Linux / macOS / Git Bash**
+Linux / macOS / Git Bash:
 ```bash
 mkdir -p data/tum
 curl -L -o data/tum/sitting_static.tgz "https://cvg.cit.tum.de/rgbd/dataset/freiburg3/rgbd_dataset_freiburg3_sitting_static.tgz"
 tar -xzf data/tum/sitting_static.tgz -C data/tum
-uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static \
-    --start 30 --num-frames 60 --device cuda
+```
+
+**② 실행** (OS 공통):
+```bash
+uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 60 --device cuda
+#   GPU 없으면 --device cpu (느림), 짧게 보려면 --num-frames 20
 ```
 
 - 산출물: `output/rgbd_pose3d.mp4`. 콘솔에 10프레임마다 `N/17 joints from depth` 출력.
@@ -116,7 +139,9 @@ uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_
 > 이 경로는 멀티뷰 RGB **삼각측량**이며 depth는 쓰지 않습니다. Depth를 활용한 3D는 3-A를 보세요.
 > (Panoptic의 Kinect depth는 `.dat` 원시 포맷 디코딩·동기·정렬이 별도로 필요합니다.)
 
-**Windows PowerShell**
+**① 데이터 준비** — Panoptic 단일 인물 시퀀스의 HD 카메라 3대 + calibration(카메라당 ~2.8GB).
+
+Windows PowerShell:
 ```powershell
 $SEQ = "171204_pose1"
 $D = "http://domedb.perception.cs.cmu.edu/webdata/dataset/$SEQ"
@@ -125,10 +150,9 @@ curl.exe -L -o "data\panoptic\$SEQ\calibration_${SEQ}.json" "$D/calibration_${SE
 foreach ($n in '03','12','23') {
   curl.exe -C - -L -o "data\panoptic\$SEQ\hdVideos\hd_00_${n}.mp4" "$D/videos/hd_shared_crf20/hd_00_${n}.mp4"
 }
-uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 --cams 00_03,00_12,00_23 --start 500 --num-frames 60 --device cuda
 ```
 
-**Linux / macOS / Git Bash**
+Linux / macOS / Git Bash:
 ```bash
 SEQ=171204_pose1
 D=http://domedb.perception.cs.cmu.edu/webdata/dataset/$SEQ
@@ -137,8 +161,11 @@ curl -L -o "data/panoptic/$SEQ/calibration_$SEQ.json" "$D/calibration_$SEQ.json"
 for n in 03 12 23; do
   curl -C - -L -o "data/panoptic/$SEQ/hdVideos/hd_00_$n.mp4" "$D/videos/hd_shared_crf20/hd_00_$n.mp4"
 done
-uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 \
-    --cams 00_03,00_12,00_23 --start 500 --num-frames 60 --device cuda
+```
+
+**② 실행** (OS 공통):
+```bash
+uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 --cams 00_03,00_12,00_23 --start 500 --num-frames 60 --device cuda
 ```
 
 산출물: `output/panoptic_video_pose3d.mp4`. 대안 다운로드: 툴박스
