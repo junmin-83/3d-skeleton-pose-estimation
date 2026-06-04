@@ -26,7 +26,6 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -39,7 +38,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.core.types import CameraParams  # noqa: E402
+from src.io.sources.panoptic import iter_panoptic_hd_frames, load_panoptic_hd_cameras  # noqa: E402
 from src.pipeline import Pipeline  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
 from src.render.skeleton_2d import draw_skeleton_2d, label_panel  # noqa: E402
@@ -47,25 +46,6 @@ from src.render.skeleton_3d import render_pose3d_frame  # noqa: E402
 from src.render.video_writer import LazyVideoWriter  # noqa: E402
 
 PW, PH = 360, 240
-_CM_TO_M = 0.01  # CMU Panoptic calibration is in centimeters
-
-
-def load_panoptic_hd_cameras(calib_path: str) -> list[CameraParams]:
-    """CMU Panoptic calibration JSON -> CameraParams (HD cams only, cm -> m)."""
-    doc = json.load(open(calib_path, encoding="utf-8"))
-    cams = []
-    for c in doc["cameras"]:
-        if c["type"] != "hd":
-            continue
-        cams.append(CameraParams(
-            name=c["name"],
-            K=np.asarray(c["K"], float),
-            dist=np.asarray(c["distCoef"], float),
-            R=np.asarray(c["R"], float),
-            t=np.asarray(c["t"], float).reshape(3) * _CM_TO_M,
-            image_size=(int(c["resolution"][0]), int(c["resolution"][1])),
-        ))
-    return cams
 
 
 def _limits_from(pose, pad=0.6):
@@ -92,12 +72,11 @@ def main() -> None:
     cams_all = {c.name: c for c in load_panoptic_hd_cameras(str(calib))}
     names = [n.strip() for n in args.cams.split(",")]
     cams = [cams_all[n] for n in names]
-    caps = [cv2.VideoCapture(str(seq / "hdVideos" / f"hd_00_{n.split('_')[1]}.mp4")) for n in names]
-    for cap, n in zip(caps, names):
-        if not cap.isOpened():
-            print(f"[panoptic-vid] cannot open hdVideos/hd_00_{n.split('_')[1]}.mp4")
-            sys.exit(1)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, args.start)
+    try:
+        frame_iter = iter_panoptic_hd_frames(seq, names, args.start, args.num_frames)
+    except FileNotFoundError as exc:
+        print(f"[panoptic-vid] {exc}")
+        sys.exit(1)
     print(f"[panoptic-vid] {len(cams)} views {names} | device={args.device} | "
           f"frames {args.start}..{args.start + args.num_frames}")
 
@@ -113,15 +92,7 @@ def main() -> None:
     writer = LazyVideoWriter(args.video, args.fps)
     lims = None
 
-    for f in range(args.num_frames):
-        frames = []
-        for cap in caps:
-            ok, img = cap.read()
-            frames.append(img if ok else None)
-        if any(im is None for im in frames):
-            print(f"[panoptic-vid] stream ended at frame {f}")
-            break
-
+    for f, frames in enumerate(frame_iter):
         kpts = np.zeros((len(cams), 17, 2))
         scores = np.zeros((len(cams), 17))
         for v, img in enumerate(frames):
@@ -146,8 +117,6 @@ def main() -> None:
         if f % 10 == 0:
             print(f"[panoptic-vid] frame {f}: {int(pose.valid.sum())}/17 joints reconstructed")
 
-    for cap in caps:
-        cap.release()
     if writer.opened:
         writer.release()
         print(f"[panoptic-vid] result video -> {args.video}")
