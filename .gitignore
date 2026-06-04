@@ -1,0 +1,26 @@
+# --- RTMPose / rtmlib model cache (TORCH_HOME=./models) ---
+models/
+*.onnx
+
+# --- Python venv & bytecode ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# --- Generated outputs (videos, PNGs, exported poses) ---
+output/
+
+# --- Downloaded datasets (large; reproducible via README curl commands) ---
+data/
+
+# --- Agent / tooling state ---
+.omc/
+.bkit/
+.claude/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db

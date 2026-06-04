@@ -1,0 +1,64 @@
+# RALPH PROGRESS — 3D Skeleton Pose Estimation
+
+## Key decisions (locked)
+- Depth camera SDK: UNDECIDED -> abstraction-only. DepthFrameSource ABC + File/Dummy backends. Real SDK (RealSense/Kinect/Orbbec) pluggable later.
+- Units: meters everywhere.
+- World frame: reference camera (cam0 / RGB1) coordinate frame = world. Configurable to board origin.
+- Keypoints: COCO 17, fixed index order across all views.
+- Single-person. Live stream (config -> recorded). Hardware-trigger sync (software nearest-frame helper provided).
+- Backend: onnxruntime-gpu, CPU fallback via config.
+
+## Codebase patterns
+- Package root: src/ (import as `src.core.types`, etc.). tests/ at repo root.
+- Every coordinate transform documents input/output frame in a docstring/comment.
+- Numerical modules (triangulation/calibration/fusion/geometry) ship with synthetic-data pytest.
+- Tests must run WITHOUT network/GPU: pose2d test uses pytest.importorskip for rtmlib.
+
+## Iteration log
+(iteration 1) PRD refined into 10 task-specific stories. Decisions locked above.
+
+(iteration 2) Built all modules. US-001..US-009 verified.
+- Foundation (core/types, core/geometry, config, scaffold) written directly; 5 numerical
+  modules built in parallel by executor agents; pipeline+run.py+README integrated directly.
+- Authoritative test run: 84 passed, 1 skipped (rtmlib-present test). Synthetic end-to-end
+  recovery error 8.7e-9 m, 17/17 joints valid.
+- Architect (opus) reviewer: APPROVED; independently re-derived extrinsics (err 5.5e-17),
+  round-trips machine precision, DLT/RANSAC/One-Euro correct. 6 non-blocking suggestions.
+- CCG cross-review: omc ask is tmux-blocked on Windows but still wrote the gemini artifact.
+  Gemini found 2 REAL bugs (now fixed):
+    1. Depth-view occlusion bypass: depth back-projection ignored the depth view's 2D score,
+       so fill_missing could accept a garbage joint. FIX: gate depth_valid by depth-view score
+       in pipeline.process (src/pipeline.py).
+    2. DLT divide-by-~0 on degenerate/parallel rays -> inf/NaN poisons One-Euro filter.
+       FIX: NaN guard in dlt.triangulate_point_dlt + finite-check in robust.triangulate_robust.
+- Also applied architect items: wired depth_weight (config+pipeline), enforced
+  det_score_threshold via apply_score_threshold in detector, wired config seed in run.py,
+  clarified detection.model is informational.
+- Post-fix suite: 89 passed, 1 skipped; synthetic recovery still 8.7e-9 m (no regression).
+- LEARNING: omc ask codex/gemini print a tmux warning on native Windows but the gemini
+  provider still completes headless and writes .omc/artifacts/ask/. Direct CLIs work:
+  `gemini -p "..." --approval-mode plan`, `copilot -p "..." --allow-all-tools`.
+- Remaining non-blocking future work (noted, not implemented): cheirality (Z>0) check in
+  triangulate_robust; vectorize sample_depth if upgrading to WholeBody (K=133).
+
+(iteration 3-4) CCG completed + finalized.
+- Codex/copilot direct review (checksum-guarded, files UNCHANGED): 0 correctness bugs;
+  confirmed all math + the depth-gating fix; suggested ref-camera exact identity -> APPLIED
+  (calibrate_extrinsics now returns R=I,t=0 for the reference cam).
+- Deslop pass (ai-slop-cleaner, evidence-based via ruff F/E9): removed 8 unused imports
+  across frame_reader/one_euro/visualize_3d + 4 test files. ruff now: All checks passed.
+- FINAL post-deslop regression: 89 passed, 1 skipped; synthetic recovery 8.7e-9 m; all
+  imports OK. All 10 PRD stories pass. Reviewers: architect APPROVED, gemini fixes applied,
+  codex/copilot 0 bugs. DONE.
+
+(iteration 5) The first-run `omc ask codex` background task finally completed (it had hung)
+and produced an artifact reviewing the CURRENT (post-fix) code. It confirmed all 5 core
+invariants correct AND found 3 genuine latent edge-case bugs -> all fixed + test-locked:
+  1. Zero-weight DLT fabricated a finite point -> guard returns NaN when total weight mass
+     is ~0 (src/triangulation/dlt.py); robust drops the joint.
+  2. One-Euro divide-by-zero for non-positive cutoff -> constructor validates
+     freq/min_cutoff/d_cutoff > 0; adaptive cutoff clamped to >=1e-6 (src/smoothing/one_euro.py).
+  3. back_project_pixels silently returned camera-frame on partial (R xor t) -> now raises
+     ValueError (src/core/geometry.py).
+- Added 3 tests (test_geometry partial-extrinsics, test_pipeline zero-weight + one-euro guard).
+- Post-fix regression: 92 passed, 1 skipped; ruff clean; synthetic 8.7e-9 m. FULLY DONE.

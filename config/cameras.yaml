@@ -1,0 +1,92 @@
+# =============================================================================
+# Camera rig + pipeline configuration
+# -----------------------------------------------------------------------------
+# Units:   length = METERS everywhere (translations, depth, 3D output).
+#          pixels = (u, v) order.
+# World frame: by default the REFERENCE camera (cam0) frame == world origin,
+#          so cam0 has R = identity, t = 0. Set world.frame = board_origin to
+#          instead anchor the world to the calibration board.
+#
+# K / dist / R / t below are PLACEHOLDERS. Run the calibration step
+# (src/calibration/calibrate.py -- see README) to fill them from your own
+# checkerboard capture, then this file is rewritten with the real values.
+# =============================================================================
+
+units:
+  length: meter
+
+world:
+  frame: reference_camera      # reference_camera | board_origin
+  reference_camera: cam0
+
+cameras:
+  - name: cam0                 # RGB1 -- reference camera == world origin
+    type: rgb
+    K: [[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]]
+    dist: [0.0, 0.0, 0.0, 0.0, 0.0]
+    R: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    t: [0.0, 0.0, 0.0]
+    image_size: [1280, 720]
+    source: 0                  # live: device index | file: path to video/dir
+
+  - name: cam1                 # RGB2
+    type: rgb
+    K: [[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]]
+    dist: [0.0, 0.0, 0.0, 0.0, 0.0]
+    R: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]   # [FILL via calibration]
+    t: [0.6, 0.0, 0.0]                                       # [FILL via calibration]
+    image_size: [1280, 720]
+    source: 1
+
+  - name: cam2                 # RGB-D (colour stream used like any RGB view)
+    type: rgbd
+    K: [[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]]
+    dist: [0.0, 0.0, 0.0, 0.0, 0.0]
+    R: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]   # [FILL via calibration]
+    t: [-0.6, 0.0, 0.0]                                      # [FILL via calibration]
+    image_size: [1280, 720]
+    source: 2
+    # Depth stream (assumed aligned to the colour stream by the SDK).
+    depth_K: [[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]]
+    depth_scale: 0.001         # raw depth unit -> meters (e.g. mm -> m)
+    depth_to_color_R: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    depth_to_color_t: [0.0, 0.0, 0.0]
+
+detection:
+  backend: cuda                # cuda | cpu  (onnxruntime execution provider)
+  model: rtmpose_body17        # informational: rtmlib Body = COCO-17; size/speed chosen via 'mode'
+  mode: balanced               # rtmlib pose mode: performance | lightweight | balanced
+  det_score_threshold: 0.3     # min keypoint score to keep a 2D detection
+
+triangulation:
+  min_views: 2                 # need >= this many valid views or joint -> depth/missing
+  score_threshold: 0.3         # drop views whose keypoint score is below this
+  ransac:
+    enabled: false
+    reproj_threshold_px: 8.0
+
+depth_fusion:
+  enabled: true
+  depth_min: 0.2               # meters; depths outside [min,max] are rejected
+  depth_max: 6.0
+  fill_missing: true           # fill triangulation-failed joints from depth
+  patch_radius_px: 2           # median depth over a small patch around (u,v)
+  depth_weight: 1.0            # trust of depth vs triangulation when both valid
+
+smoothing:
+  enabled: true
+  freq: 30.0                   # nominal frame rate (Hz); overridden by timestamps
+  min_cutoff: 1.0
+  beta: 0.007
+  d_cutoff: 1.0
+
+input:
+  mode: live                   # live | file
+  sync: hardware               # hardware | software (timestamp nearest-frame)
+  sync_tolerance_ms: 10.0      # used only for software sync
+
+output:
+  format: json                 # json | npy
+  path: output/
+
+seed: 0                        # set for reproducibility (null to disable)

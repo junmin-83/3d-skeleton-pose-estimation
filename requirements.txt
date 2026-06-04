@@ -1,0 +1,22 @@
+# 3D Skeleton Pose Estimation — pinned dependencies
+# Install:  uv venv --python 3.11  &&  uv pip install -r requirements.txt
+# (rtmlib downloads RTMPose ONNX models from the internet on first run.)
+
+# --- Geometry / numerics (required for the full numerical pipeline & tests) ---
+numpy>=1.24,<3.0
+scipy>=1.10,<2.0
+opencv-python>=4.8,<5.0
+PyYAML>=6.0,<7.0
+matplotlib>=3.7,<4.0
+
+# --- 2D keypoint detection (RTMPose via rtmlib; NO mmcv/mmpose/mmdet) ---
+rtmlib>=0.0.13
+
+# --- Inference backend ---
+# GPU (default). Requires a CUDA-capable NVIDIA GPU + matching CUDA/cuDNN.
+onnxruntime-gpu>=1.16
+# CPU fallback — uncomment this and comment out onnxruntime-gpu if no GPU:
+# onnxruntime>=1.16
+
+# --- Testing ---
+pytest>=7.4
