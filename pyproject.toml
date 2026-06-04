@@ -1,0 +1,28 @@
+[project]
+name = "skeleton-pose-3d"
+version = "0.1.0"
+description = "3D skeleton pose estimation from 2 RGB + 1 RGB-D cameras (RTMPose + multi-view triangulation + depth fusion). Inference only."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.24,<3.0",
+    "scipy>=1.10,<2.0",
+    "opencv-python>=4.8,<5.0",
+    "PyYAML>=6.0,<7.0",
+    "matplotlib>=3.7,<4.0",
+    # rtmlib (RTMPose ONNX) pulls in onnxruntime (CPU), opencv-contrib-python, tqdm.
+    # For NVIDIA GPU inference, after `uv sync` run:
+    #   uv pip uninstall onnxruntime && uv pip install onnxruntime-gpu
+    "rtmlib>=0.0.13",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4",
+    "ruff>=0.1",
+]
+
+[tool.uv]
+# Dependency-only ("virtual") project: src/ is imported by path, not pip-installed,
+# so uv should manage the environment without trying to build this as a package.
+package = false
