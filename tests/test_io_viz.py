@@ -1,6 +1,6 @@
 """Tests for frame_reader.py, render/skeleton_3d.py, and io/keypoints_io.py.
 
-All tests run headless (no display required) and offline (no network).
+All headless (no display) and offline (no network).
 """
 
 from __future__ import annotations
@@ -17,18 +17,14 @@ from src.io.keypoints_io import export_keypoints, load_keypoints
 from src.render.skeleton_3d import save_skeleton_png
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _make_synthetic_images(base_dir: Path, n_cameras: int, n_frames: int, size: tuple[int, int] = (32, 32)) -> list[Path]:
-    """Write n_cameras subdirectories each containing n_frames PNG images."""
+    """Write n_cameras subdirs, each with n_frames PNGs. Returns the cam dirs."""
     cam_dirs = []
     for c in range(n_cameras):
         cam_dir = base_dir / f"cam{c}"
         cam_dir.mkdir(parents=True, exist_ok=True)
         for f in range(n_frames):
-            # Each image has a distinct pixel value so we can tell them apart.
+            # Distinct fill per image so we can tell frames apart.
             img = np.full((size[1], size[0], 3), fill_value=(c * 20 + f * 5) % 255, dtype=np.uint8)
             path = cam_dir / f"frame_{f:04d}.png"
             ok = cv2.imwrite(str(path), img)
@@ -45,10 +41,6 @@ def _make_pose3d(seed: int = 0) -> Pose3D:
     source = ["tri"] * NUM_KEYPOINTS
     return Pose3D(points=points, scores=scores, valid=valid, source=source)
 
-
-# ---------------------------------------------------------------------------
-# nearest_frame_match
-# ---------------------------------------------------------------------------
 
 class TestNearestFrameMatch:
     def test_exact_match(self):
@@ -81,15 +73,13 @@ class TestNearestFrameMatch:
         assert nearest_frame_match(5.0, [6.0], tolerance=0.5) is None
 
     def test_tie_picks_first(self):
-        # Both candidates equidistant; argmin picks the first one.
+        # Equidistant candidates; argmin takes the first.
         candidates = [0.0, 2.0]
         result = nearest_frame_match(1.0, candidates, tolerance=1.0)
-        assert result in (0, 1)  # either is acceptable; just must not be None
+        assert result in (0, 1)  # either is fine, just not None
 
 
-# ---------------------------------------------------------------------------
-# MultiViewFrameReader – file mode
-# ---------------------------------------------------------------------------
+# MultiViewFrameReader, file mode
 
 N_CAMERAS = 3
 N_FRAMES = 4
@@ -147,10 +137,10 @@ class TestMultiViewFrameReaderFile:
         assert set(fs.timestamps.keys()) == {f"cam{i}" for i in range(N_CAMERAS)}
 
     def test_file_mode_with_sidecar_timestamps(self, tmp_path):
-        """When all specs supply timestamps, nearest-frame matching is used."""
+        """When every spec supplies timestamps, nearest-frame matching kicks in."""
         cam_dirs = _make_synthetic_images(tmp_path, 2, N_FRAMES)
         base_ts = [0.0, 0.1, 0.2, 0.3]
-        # Second camera slightly offset but within tolerance.
+        # cam1 slightly offset but within tolerance.
         offset_ts = [0.005, 0.105, 0.205, 0.305]
         specs = [
             CameraSpec("cam0", cam_dirs[0], timestamps=base_ts),
@@ -172,10 +162,6 @@ class TestMultiViewFrameReaderFile:
         with pytest.raises(ValueError):
             MultiViewFrameReader(specs)
 
-
-# ---------------------------------------------------------------------------
-# Visualisation
-# ---------------------------------------------------------------------------
 
 class TestVisualization:
     def test_save_skeleton_png_creates_file(self, tmp_path):
@@ -224,10 +210,6 @@ class TestVisualization:
         assert fig is not None
         plt.close(fig)
 
-
-# ---------------------------------------------------------------------------
-# Export / load round-trips
-# ---------------------------------------------------------------------------
 
 class TestExportLoad:
     def test_json_roundtrip(self, tmp_path):

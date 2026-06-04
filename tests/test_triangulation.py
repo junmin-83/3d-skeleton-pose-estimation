@@ -1,12 +1,11 @@
 """Synthetic-data triangulation tests (SPEC 7-2).
 
-Known 3D world points are projected (noise-free) into three virtual cameras
-with build_projection_matrix, then triangulated back. Recovery must be at
-numerical precision. Also covers confidence weighting, robust outlier
-rejection, and the min_views deferral case.
+Project known world points noise-free into three virtual cameras, then
+triangulate them back; recovery should be at numerical precision. Also covers
+confidence weighting, robust outlier rejection, and the min_views deferral.
 
-All units are meters; pixels are ``(u, v)``; ``P = K [R | t]`` maps world ->
-pixel. The world frame coincides with the reference camera (cam0) frame.
+Meters throughout; pixels are (u, v); P = K [R | t] maps world to pixel. World
+frame == reference camera (cam0) frame.
 """
 
 import numpy as np
@@ -19,11 +18,11 @@ from src.triangulation.robust import triangulate_robust
 
 
 def _make_cameras():
-    """Three virtual cameras with distinct K, R (scipy), t (meters).
+    """Three virtual cameras with distinct K, R, t (meters).
 
-    cam0 is the reference (world == cam0 frame: R=I, t=0). cam1/cam2 are
-    rotated and translated so all three see a person standing ~2-3 m away.
-    Returns a list of (3, 4) projection matrices, world -> pixel.
+    cam0 is the reference (world == cam0: R=I, t=0). cam1/cam2 are rotated and
+    shifted so all three see a person standing ~2-3 m away. Returns a list of
+    (3, 4) projection matrices, world -> pixel.
     """
     K0 = np.array([[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
     K1 = np.array([[1000.0, 0.0, 620.0], [0.0, 1000.0, 380.0], [0.0, 0.0, 1.0]])
@@ -47,13 +46,12 @@ def _make_cameras():
 
 
 def _standing_skeleton():
-    """17 plausible standing-person 3D points (meters) in the world frame.
+    """17 standing-person 3D points (meters) in the world frame.
 
-    Roughly a 1 m-wide person at ~2.5 m depth (+z), head up (+y down image is
-    handled by projection). Values are deterministic, not random.
+    Roughly a 1 m-wide person at ~2.5 m depth (+z). Deterministic, not random.
     """
     z = 2.5  # depth from cam0, meters
-    # (x, y) laid out as a coarse upright skeleton; z constant-ish.
+    # (x, y) laid out as a coarse upright skeleton; z roughly constant.
     pts = np.array(
         [
             [0.00, 0.75, z],        # nose
@@ -76,7 +74,7 @@ def _standing_skeleton():
         ],
         dtype=float,
     )
-    # Add mild per-joint depth variation so the geometry is non-degenerate.
+    # Mild per-joint depth variation so the geometry isn't degenerate.
     pts[:, 2] += np.linspace(-0.1, 0.1, pts.shape[0])
     assert pts.shape == (NUM_KEYPOINTS, 3)
     return pts
@@ -97,7 +95,7 @@ def test_single_point_exact_recovery():
 
 
 def test_keypoints_exact_recovery():
-    """Full 17-keypoint skeleton recovered to numerical precision (<1e-6 m)."""
+    """Full 17-keypoint skeleton recovered to <1e-6 m."""
     proj = _make_cameras()
     pts_world = _standing_skeleton()
     kpts = _project_all(proj, pts_world)                  # (V, K, 2)
@@ -110,7 +108,7 @@ def test_keypoints_exact_recovery():
 
 
 def test_robust_exact_recovery_all_views():
-    """robust path with all views above threshold matches the truth exactly."""
+    """Robust path with every view above threshold matches the truth exactly."""
     proj = _make_cameras()
     pts_world = _standing_skeleton()
     kpts = _project_all(proj, pts_world)
@@ -129,13 +127,13 @@ def test_weighting_improves_accuracy_with_noisy_view():
     x_true = np.array([0.10, 0.20, 2.55])
     obs = np.stack([project_points(P, x_true) for P in proj], axis=0)
 
-    # Corrupt view index 2 with a sizeable pixel offset (noise on one view).
+    # Corrupt view 2 with a sizeable pixel offset.
     obs_noisy = obs.copy()
     obs_noisy[2] += np.array([25.0, -18.0])
 
     # Equal weights: the noisy view drags the estimate.
     equal = triangulate_point_dlt(obs_noisy, proj, weights=np.ones(3))
-    # Confidence weights: noisy view gets a low weight.
+    # Confidence weights: noisy view down-weighted.
     weighted = triangulate_point_dlt(
         obs_noisy, proj, weights=np.array([1.0, 1.0, 0.02])
     )
@@ -151,10 +149,9 @@ def test_robust_outlier_rejection_recovers_within_mm():
     pts_world = _standing_skeleton()
     kpts = _project_all(proj, pts_world)
 
-    # All views confident...
+    # All views confident, except view 2 on one keypoint, which we corrupt
+    # badly and mark below threshold so it gets excluded.
     scores = np.full((len(proj), NUM_KEYPOINTS), 0.9)
-    # ...except view 2 on a single keypoint, which we corrupt badly and
-    # mark below threshold so it is excluded.
     bad_kp = 9  # left_wrist
     kpts[2, bad_kp] += np.array([120.0, -90.0])
     scores[2, bad_kp] = 0.05  # below score_threshold
@@ -164,7 +161,7 @@ def test_robust_outlier_rejection_recovers_within_mm():
     )
 
     assert pose.valid[bad_kp]
-    # Excluded the corrupted view -> remaining 2 views recover it within mm.
+    # Corrupted view dropped, remaining 2 views recover it within mm.
     err = np.linalg.norm(pose.points[bad_kp] - pts_world[bad_kp])
     assert err < 5e-3  # < 5 mm
     # Untouched keypoints still recover exactly.
@@ -173,10 +170,10 @@ def test_robust_outlier_rejection_recovers_within_mm():
 
 
 def test_ransac_rejects_outlier_view_when_score_high():
-    """ransac=True rejects a view that is geometrically inconsistent.
+    """ransac=True drops a geometrically inconsistent view.
 
-    Here the corrupted view keeps a *high* score, so score thresholding alone
-    would not drop it; reprojection-based RANSAC must.
+    The corrupted view keeps a high score, so score thresholding alone won't
+    drop it; reprojection-based RANSAC has to.
     """
     proj = _make_cameras()
     pts_world = _standing_skeleton()
@@ -194,11 +191,11 @@ def test_ransac_rejects_outlier_view_when_score_high():
 
     assert pose.valid[bad_kp]
     err = np.linalg.norm(pose.points[bad_kp] - pts_world[bad_kp])
-    assert err < 5e-3  # outlier view rejected -> within mm
+    assert err < 5e-3  # outlier view rejected, within mm
 
 
 def test_min_views_marks_keypoint_invalid():
-    """A keypoint above threshold in only one view -> valid=False, missing."""
+    """A keypoint above threshold in only one view comes back invalid and missing."""
     proj = _make_cameras()
     pts_world = _standing_skeleton()
     kpts = _project_all(proj, pts_world)
@@ -221,7 +218,7 @@ def test_min_views_marks_keypoint_invalid():
 
 
 def test_dlt_zero_weights_returns_nan_and_robust_drops_joint():
-    """All-zero weights carry no constraint -> NaN; robust marks the joint missing."""
+    """All-zero weights carry no constraint, so DLT gives NaN and robust marks it missing."""
     K = np.array([[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
     p_a = build_projection_matrix(K, np.eye(3), np.zeros(3))
     p_b = build_projection_matrix(K, np.eye(3), np.array([0.5, 0.0, 0.0]))

@@ -1,7 +1,7 @@
 """Tests for src/pose2d/rtmpose_detector.py.
 
-All tests pass offline (no rtmlib / onnxruntime required) except the
-detector-integration test, which is skipped when rtmlib is absent.
+All offline (no rtmlib / onnxruntime), except the detector-integration test,
+which is skipped when rtmlib is absent.
 """
 
 from __future__ import annotations
@@ -20,25 +20,17 @@ from src.pose2d.rtmpose_detector import (
 )
 from src.core.types import NUM_KEYPOINTS, Pose2D
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 _K = NUM_KEYPOINTS  # 17
 
 
 def _kp(n: int = 1, k: int = _K) -> np.ndarray:
-    """Return a float array of shape (n, k, 2) with unique values."""
+    """Float (n, k, 2) array of unique values."""
     return np.arange(n * k * 2, dtype=float).reshape(n, k, 2)
 
 
 def _sc(n: int = 1, k: int = _K, fill: float = 0.5) -> np.ndarray:
     return np.full((n, k), fill, dtype=float)
 
-
-# ---------------------------------------------------------------------------
-# normalize_rtmlib_output
-# ---------------------------------------------------------------------------
 
 class TestNormalizeRtmlibOutput:
     def test_single_person_promoted_to_batch(self):
@@ -94,16 +86,12 @@ class TestNormalizeRtmlibOutput:
         np.testing.assert_allclose(sc_out[0], sc_in)
 
 
-# ---------------------------------------------------------------------------
-# best_person
-# ---------------------------------------------------------------------------
-
 class TestBestPerson:
     def test_returns_higher_scoring_person(self):
         kp = _kp(n=2)
         sc = np.zeros((2, _K), dtype=float)
         sc[0] = 0.3   # lower mean
-        sc[1] = 0.9   # higher mean — should be selected
+        sc[1] = 0.9   # higher mean, should be selected
         result = best_person(kp, sc)
         assert isinstance(result, Pose2D)
         np.testing.assert_array_equal(result.keypoints, kp[1])
@@ -134,35 +122,29 @@ class TestBestPerson:
         np.testing.assert_array_equal(result.scores, np.zeros(_K))
 
     def test_result_is_copy_not_view(self):
-        """Mutating the returned Pose2D should not affect the source array."""
+        """Mutating the returned Pose2D doesn't touch the source array."""
         kp = _kp(n=2)
         sc = _sc(n=2)
         original_val = float(kp[0, 0, 0])
         result = best_person(kp, sc)
         result.keypoints[0, 0] = -9999.0
-        # source array for person 0 must be untouched
+        # source array for person 0 stays untouched
         assert kp[0, 0, 0] == original_val
 
     def test_tiebreak_picks_first_argmax(self):
-        """When two persons have equal mean score, argmax returns the first."""
+        """On an equal-mean-score tie, argmax returns the first person."""
         kp = _kp(n=2)
         sc = np.full((2, _K), 0.5, dtype=float)
         result = best_person(kp, sc)
         np.testing.assert_array_equal(result.keypoints, kp[0])
 
 
-# ---------------------------------------------------------------------------
-# RTMPoseDetector — ImportError when rtmlib absent
-# ---------------------------------------------------------------------------
-
-# Detect whether rtmlib is actually installed in this environment.
 _rtmlib_available = importlib.util.find_spec("rtmlib") is not None
 
 
 class TestDetectorImport:
     def test_raises_import_error_when_rtmlib_absent(self):
-        """When rtmlib is not installed, RTMPoseDetector.__init__ must raise
-        ImportError with a helpful install message."""
+        """Without rtmlib installed, __init__ raises ImportError mentioning rtmlib."""
         if _rtmlib_available:
             pytest.skip("rtmlib is installed; ImportError path cannot be triggered")
         with pytest.raises(ImportError, match="rtmlib"):
@@ -173,16 +155,13 @@ class TestDetectorImport:
         reason="rtmlib not installed; skipping live-detector smoke test",
     )
     def test_detector_builds_when_rtmlib_present(self):
-        """If rtmlib is installed this smoke-test verifies the detector
-        constructs without error (no image inference needed)."""
+        """Smoke test: with rtmlib present, the detector constructs (no inference)."""
         det = RTMPoseDetector(device="cpu", mode="lightweight")
         assert hasattr(det, "_body")
         assert det.score_threshold == 0.3
 
 
-# ---------------------------------------------------------------------------
-# apply_score_threshold — occluded-joint down-weighting (SPEC §5.4)
-# ---------------------------------------------------------------------------
+# apply_score_threshold: occluded-joint down-weighting (SPEC 5.4)
 
 class TestApplyScoreThreshold:
     def test_zeros_below_threshold(self):
@@ -197,9 +176,7 @@ class TestApplyScoreThreshold:
         np.testing.assert_array_equal(sc, [0.1, 0.9])
 
 
-# ---------------------------------------------------------------------------
-# resolve_device — GPU default with graceful CPU fallback
-# ---------------------------------------------------------------------------
+# resolve_device: GPU default with graceful CPU fallback
 
 class TestResolveDevice:
     _GPU = ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]

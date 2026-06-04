@@ -1,10 +1,10 @@
-"""Integration tests for src/pipeline.py (Pipeline.process strategy selection).
+"""Integration tests for Pipeline.process strategy selection.
 
 Synthetic, offline, no rtmlib/GPU: project known 3D points into camera views and
 (for the depth paths) stamp their metric Z into an aligned depth map, then check
-``Pipeline.process`` recovers the 3D pose. Covers the three reconstruction
-strategies — multi-view triangulation, depth-only back-projection, and the
-triangulation+depth fusion hybrid — plus low-confidence gating.
+Pipeline.process recovers the pose. Covers the three reconstruction strategies
+(multi-view triangulation, depth-only back-projection, triangulation+depth
+fusion) plus low-confidence gating.
 """
 
 from __future__ import annotations
@@ -20,10 +20,6 @@ _IMG = (640, 480)
 _ZERO_DIST = np.zeros(5)
 
 
-# ---------------------------------------------------------------------------
-# Synthetic-data helpers
-# ---------------------------------------------------------------------------
-
 def _world_from_pixels(pixels_uv: np.ndarray, zs: np.ndarray) -> np.ndarray:
     """Inverse-project (u, v, Z) -> camera-frame XYZ (== world when R=I, t=0)."""
     fx, fy, cx, cy = _K[0, 0], _K[1, 1], _K[0, 2], _K[1, 2]
@@ -34,7 +30,7 @@ def _world_from_pixels(pixels_uv: np.ndarray, zs: np.ndarray) -> np.ndarray:
 
 
 def _synthetic_pose(n: int = NUM_KEYPOINTS):
-    """n distinct in-bounds integer pixels + varied depths, with world points."""
+    """n in-bounds integer pixels at varied depths, plus their world points."""
     us = np.linspace(120, 500, n).round()
     vs = np.linspace(120, 380, n).round()
     pixels = np.stack([us, vs], axis=1)
@@ -61,10 +57,6 @@ def _depth_map_at(pixels_uv: np.ndarray, zs: np.ndarray) -> np.ndarray:
     return dm
 
 
-# ---------------------------------------------------------------------------
-# Multi-view triangulation
-# ---------------------------------------------------------------------------
-
 class TestTriangulationStrategy:
     def test_two_view_recovers_world_points(self):
         world, _, _ = _synthetic_pose()
@@ -80,9 +72,7 @@ class TestTriangulationStrategy:
         np.testing.assert_allclose(result.points, world, atol=1e-6)
 
 
-# ---------------------------------------------------------------------------
-# Depth-only back-projection (single RGB-D view — the rgbd demo's path)
-# ---------------------------------------------------------------------------
+# Depth-only back-projection: single RGB-D view, the rgbd demo's path.
 
 class TestDepthOnlyStrategy:
     def test_single_rgbd_view_back_projects(self):
@@ -100,9 +90,7 @@ class TestDepthOnlyStrategy:
         np.testing.assert_allclose(result.points, world, atol=1e-5)
 
 
-# ---------------------------------------------------------------------------
-# Hybrid: triangulation + depth fusion (both estimate the same point)
-# ---------------------------------------------------------------------------
+# Hybrid: triangulation + depth fusion, both estimating the same point.
 
 class TestHybridFusionStrategy:
     def test_triangulation_plus_depth_agree(self):
@@ -124,10 +112,6 @@ class TestHybridFusionStrategy:
         assert result.valid.all()
         np.testing.assert_allclose(result.points, world, atol=1e-3)
 
-
-# ---------------------------------------------------------------------------
-# Confidence gating
-# ---------------------------------------------------------------------------
 
 class TestConfidenceGating:
     def test_subthreshold_joint_is_invalid(self):

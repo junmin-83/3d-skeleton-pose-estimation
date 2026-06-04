@@ -1,4 +1,4 @@
-"""Depth-fusion unit tests: back-projection recovery, sampling validity, fusion."""
+"""Depth-fusion tests: back-projection recovery, sampling validity, fusion math."""
 
 import numpy as np
 import pytest
@@ -19,7 +19,7 @@ from src.io.depth_reader import DummyDepthSource
 
 
 def _make_depth_camera(seed: int = 0):
-    """A plausible depth camera with non-trivial pose (world -> camera)."""
+    """A depth camera with a non-trivial pose (world -> camera)."""
     width, height = 1280, 720
     K = np.array([[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
     R = Rotation.from_euler("xyz", [8.0, -20.0, 4.0], degrees=True).as_matrix()
@@ -28,7 +28,7 @@ def _make_depth_camera(seed: int = 0):
 
 
 def test_depth_back_projection_recovers_world_point():
-    """A known world point in front of the depth camera is recovered to 1e-6 m."""
+    """A world point in front of the depth camera is recovered to 1e-6 m."""
     width, height, K, R, t = _make_depth_camera()
     P = build_projection_matrix(K, R, t)
 
@@ -36,12 +36,12 @@ def test_depth_back_projection_recovers_world_point():
     uv = project_points(P, point_world)              # world -> colour pixel
     z_cam = world_to_camera(R, t, point_world)[2]    # camera-frame Z (meters)
 
-    # Stamp the metric Z at that pixel in a dummy aligned depth map.
+    # Stamp metric Z at that pixel in a dummy aligned depth map.
     src = DummyDepthSource(width, height, K, depth_scale=1.0, default_z=2.0)
     src.set_depth((uv[0], uv[1]), z_cam)
     depth_map, _ = src.read()
 
-    # Sample with radius 0 so only the stamped pixel contributes.
+    # Radius 0 so only the stamped pixel contributes.
     points_world, valid = back_project_depth_keypoints(
         uv.reshape(1, 2), depth_map, src.intrinsics(), R, t,
         patch_radius=0, depth_min=0.2, depth_max=6.0,

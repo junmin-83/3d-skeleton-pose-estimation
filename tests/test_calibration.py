@@ -1,12 +1,11 @@
-"""Calibration tests on synthetic data (no camera / network required).
+"""Calibration tests on synthetic data (no camera / network).
 
-A planar checkerboard is projected with a known intrinsic/extrinsic via
-``cv2.projectPoints`` (zero distortion). The tests check:
-  - zero-error reprojection on exact synthetic data,
-  - ``solvePnP`` recovers the known board pose,
-  - ``calibrate_extrinsics`` yields R=I,t=0 for the reference camera and maps a
-    second camera correctly (verified through ``build_projection_matrix`` +
-    ``project_points``),
+A planar checkerboard is projected with known intrinsics/extrinsics via
+cv2.projectPoints (zero distortion). Checks:
+  - reprojection error is ~0 on exact synthetic data,
+  - solvePnP recovers the known board pose,
+  - calibrate_extrinsics gives R=I, t=0 for the reference camera and maps a
+    second camera correctly (checked via build_projection_matrix + project_points),
   - YAML save/load round-trips intrinsics, extrinsics, P, and depth fields.
 """
 
@@ -32,7 +31,7 @@ ZERO_DIST = np.zeros(5)
 
 
 def _project(object_points, R, t, K=K_TRUE, dist=ZERO_DIST):
-    """Project board points (board->camera R,t) to pixels via cv2.projectPoints."""
+    """Project board points to pixels via cv2.projectPoints (board->camera R, t)."""
     import cv2
 
     rvec = cv2.Rodrigues(np.asarray(R, float))[0]
@@ -44,7 +43,7 @@ def _project(object_points, R, t, K=K_TRUE, dist=ZERO_DIST):
 
 
 def _board_pose(seed):
-    """A known board->camera pose placing the board well in front of the camera."""
+    """A board->camera pose with the board well in front of the camera."""
     R = Rotation.from_euler("xyz", [5.0, -10.0, 3.0], degrees=True).as_matrix()
     rng = np.random.default_rng(seed)
     t = np.array([0.05, -0.02, 0.8]) + rng.uniform(-0.01, 0.01, size=3)
@@ -85,10 +84,11 @@ def test_extrinsics_reference_is_identity_and_second_camera_maps_correctly():
     np.testing.assert_allclose(ext["cam0"][0], np.eye(3), atol=1e-12)
     np.testing.assert_allclose(ext["cam0"][1], np.zeros(3), atol=1e-12)
 
-    # A world point = a board point expressed in cam0 frame (X_world = R0 X_board + t0).
-    # Projecting it with cam1's world->camera P must equal the direct board->cam1 pixel.
+    # World point = board point in the cam0 frame (X_world = R0 X_board + t0).
+    # Projecting it with cam1's world->camera P should match the direct
+    # board->cam1 pixel.
     R1_w, t1_w = ext["cam1"]
-    P1 = K_TRUE @ build_projection_matrix(np.eye(3), R1_w, t1_w)  # K @ [R|t] = full P
+    P1 = K_TRUE @ build_projection_matrix(np.eye(3), R1_w, t1_w)  # full P = K @ [R|t]
 
     board_pt = obj[10]                       # some board corner
     x_world = R0 @ board_pt + t0             # board point in cam0 (== world) frame
@@ -133,7 +133,7 @@ def test_yaml_roundtrip_two_rgb_one_rgbd(tmp_path):
             depth_to_color_t=np.array([0.015, 0.0, 0.0]),
         ),
     ]
-    # Preserve source like the real config schema.
+    # Carry source through like the real config schema does.
     for cam, src in zip(cams, [0, 1, 2]):
         cam.source = src
 
@@ -151,7 +151,7 @@ def test_yaml_roundtrip_two_rgb_one_rgbd(tmp_path):
         np.testing.assert_allclose(got.P, orig.P)
         assert got.source == orig.source
 
-    # The rgbd camera must round-trip as DepthCameraParams with its depth fields.
+    # The rgbd camera round-trips as DepthCameraParams with its depth fields.
     rgbd = loaded[2]
     assert isinstance(rgbd, DepthCameraParams)
     assert not isinstance(loaded[0], DepthCameraParams)
