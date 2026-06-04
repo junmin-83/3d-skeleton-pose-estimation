@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.core.types import DepthCameraParams  # noqa: E402
 from src.io.sources.realsense import RealSenseSource  # noqa: E402
 from src.io.sources.tum import TUMSource  # noqa: E402
+from src.io.keypoints_io import export_keypoints  # noqa: E402
 from src.pipeline import Pipeline  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
 from src.render.skeleton_2d import draw_skeleton_2d, label_panel  # noqa: E402
@@ -70,6 +71,9 @@ def main() -> None:
     ap.add_argument("--depth-max", type=float, default=5.0)
     ap.add_argument("--fps", type=float, default=30.0)
     ap.add_argument("--video", default="output/rgbd_pose3d.mp4")
+    ap.add_argument("--keypoints", default="output/rgbd_pose3d.json",
+                    help="per-frame 3D keypoints output (points/scores/valid/source).")
+    ap.add_argument("--keypoints-format", default="json", choices=["json", "npy"])
     args = ap.parse_args()
 
     if args.tum:
@@ -98,6 +102,7 @@ def main() -> None:
     lims = None
     scale = (PW / 640.0, PH / 480.0)
 
+    poses: list = []
     n = 0
     for color, depth_m, K in frames:
         if pipe is None:
@@ -108,6 +113,7 @@ def main() -> None:
         pose2d = detector.detect_best(color)
         pose = pipe.process(pose2d.keypoints[np.newaxis], pose2d.scores[np.newaxis],
                             depth_map=depth_m, timestamp=n / args.fps)
+        poses.append(pose)
         if lims is None and pose.valid.any():
             c = pose.points[pose.valid].mean(axis=0)
             lims = [(c[a] - 0.8, c[a] + 0.8) for a in range(3)]
@@ -132,6 +138,8 @@ def main() -> None:
     writer.release()
     plt.close(fig)
     print(f"[rgbd] result video ({n} frames) -> {args.video}")
+    export_keypoints(poses, args.keypoints, fmt=args.keypoints_format)
+    print(f"[rgbd] 3D keypoints ({len(poses)} frames) -> {args.keypoints}")
 
 
 if __name__ == "__main__":

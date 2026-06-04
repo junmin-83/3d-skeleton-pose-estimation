@@ -26,6 +26,7 @@ import cv2
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.core.types import COCO_17_KEYPOINTS  # noqa: E402
+from src.io.keypoints_io import export_keypoints_2d  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
 from src.render.skeleton_2d import draw_skeleton_2d  # noqa: E402
 from src.render.video_writer import LazyVideoWriter  # noqa: E402
@@ -65,6 +66,8 @@ def _parse_args() -> argparse.Namespace:
                     help="keypoint confidence threshold; raise it to drop low-confidence (often wrong) joints.")
     ap.add_argument("--out", default="output/realtime_keypoints.png", help="last-frame annotated image path.")
     ap.add_argument("--video", default="output/realtime_keypoints.mp4", help="annotated MP4 video path (all frames).")
+    ap.add_argument("--keypoints", default="output/realtime_keypoints2d.json",
+                    help="per-frame 2D keypoints output (JSON: keypoints (17,2) px + scores).")
     ap.add_argument("--fps", type=float, default=30.0, help="playback frame rate for the output MP4.")
     return ap.parse_args()
 
@@ -81,12 +84,14 @@ def main() -> None:
 
     times: list[float] = []
     last_pose = last_annotated = None
+    poses_2d: list = []
     writer = LazyVideoWriter(args.video, args.fps)
     for idx, frame in enumerate(frame_source(args)):
         t0 = time.perf_counter()
         pose = detector.detect_best(frame)        # Pose2D, COCO 17개 키포인트
         dt = time.perf_counter() - t0
         times.append(dt)
+        poses_2d.append(pose)
 
         annotated = draw_skeleton_2d(
             frame, pose.keypoints, pose.scores, detector.score_threshold,
@@ -122,6 +127,9 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out_path), last_annotated)
     print(f"[demo] last-frame image -> {out_path}")
+
+    export_keypoints_2d(poses_2d, args.keypoints)
+    print(f"[demo] 2D keypoints ({len(poses_2d)} frames) -> {args.keypoints}")
 
 
 if __name__ == "__main__":

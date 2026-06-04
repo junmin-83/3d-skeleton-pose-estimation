@@ -39,6 +39,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.io.sources.panoptic import iter_panoptic_hd_frames, load_panoptic_hd_cameras  # noqa: E402
+from src.io.keypoints_io import export_keypoints  # noqa: E402
 from src.pipeline import Pipeline  # noqa: E402
 from src.pose2d.rtmpose_detector import RTMPoseDetector  # noqa: E402
 from src.render.skeleton_2d import draw_skeleton_2d, label_panel  # noqa: E402
@@ -65,6 +66,9 @@ def main() -> None:
     ap.add_argument("--mode", default="balanced")
     ap.add_argument("--fps", type=float, default=30.0)
     ap.add_argument("--video", default="output/panoptic_video_pose3d.mp4")
+    ap.add_argument("--keypoints", default="output/panoptic_pose3d.json",
+                    help="per-frame 3D keypoints output (points/scores/valid/source).")
+    ap.add_argument("--keypoints-format", default="json", choices=["json", "npy"])
     args = ap.parse_args()
 
     seq = Path(args.seq_dir)
@@ -91,6 +95,7 @@ def main() -> None:
     ax = fig.add_subplot(111, projection="3d")
     writer = LazyVideoWriter(args.video, args.fps)
     lims = None
+    poses: list = []
 
     for f, frames in enumerate(frame_iter):
         kpts = np.zeros((len(cams), 17, 2))
@@ -99,6 +104,7 @@ def main() -> None:
             pose2d = detector.detect_best(img)
             kpts[v], scores[v] = pose2d.keypoints, pose2d.scores
         pose = pipe.process(kpts, scores, depth_map=None, timestamp=f / args.fps)
+        poses.append(pose)
         if lims is None and pose.valid.any():
             lims = _limits_from(pose)
 
@@ -121,6 +127,8 @@ def main() -> None:
         writer.release()
         print(f"[panoptic-vid] result video -> {args.video}")
     plt.close(fig)
+    export_keypoints(poses, args.keypoints, fmt=args.keypoints_format)
+    print(f"[panoptic-vid] 3D keypoints ({len(poses)} frames) -> {args.keypoints}")
 
 
 if __name__ == "__main__":

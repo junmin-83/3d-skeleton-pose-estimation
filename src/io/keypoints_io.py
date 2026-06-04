@@ -12,7 +12,7 @@ from typing import Sequence
 
 import numpy as np
 
-from src.core.types import Pose3D
+from src.core.types import Pose2D, Pose3D
 
 
 def export_keypoints(
@@ -69,6 +69,23 @@ def export_keypoints(
         )
     else:
         raise ValueError(f"Unsupported export format: {fmt!r}. Use 'json' or 'npy'.")
+
+
+def export_keypoints_2d(poses: "Pose2D | Sequence[Pose2D]", path: str) -> None:
+    """Export 2D poses (one Pose2D per frame) to JSON.
+
+    Array of {"keypoints": K x 2 (u,v) pixels, "scores": K in [0,1]}; frame order
+    == array order, COCO-17 index order. For 3D use export_keypoints.
+    """
+    pose_list = [poses] if isinstance(poses, Pose2D) else list(poses)
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {"keypoints": p.keypoints.tolist(), "scores": p.scores.tolist()}
+        for p in pose_list
+    ]
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(records, fh, indent=2)
 
 
 def load_keypoints(path: str, fmt: str = "json") -> list[Pose3D]:

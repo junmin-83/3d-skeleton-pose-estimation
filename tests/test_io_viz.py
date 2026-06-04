@@ -5,6 +5,7 @@ All headless (no display) and offline (no network).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import cv2
@@ -12,8 +13,8 @@ import numpy as np
 import pytest
 
 from src.io.frame_reader import CameraSpec, MultiViewFrameReader, nearest_frame_match
-from src.core.types import Pose3D, NUM_KEYPOINTS
-from src.io.keypoints_io import export_keypoints, load_keypoints
+from src.core.types import NUM_KEYPOINTS, Pose2D, Pose3D
+from src.io.keypoints_io import export_keypoints, export_keypoints_2d, load_keypoints
 from src.render.skeleton_3d import save_skeleton_png
 
 
@@ -260,3 +261,29 @@ class TestExportLoad:
         export_keypoints(poses, str(out), fmt="npy")
         sidecar = tmp_path / "poses.npy.npz"
         assert sidecar.exists()
+
+
+def _make_pose2d(seed: int = 0) -> Pose2D:
+    rng = np.random.default_rng(seed)
+    return Pose2D(keypoints=rng.uniform(0, 640, (NUM_KEYPOINTS, 2)),
+                  scores=rng.uniform(0.0, 1.0, NUM_KEYPOINTS))
+
+
+class TestExport2D:
+    def test_json_structure_and_values(self, tmp_path):
+        poses = [_make_pose2d(seed=i) for i in range(3)]
+        out = tmp_path / "kpts2d.json"
+        export_keypoints_2d(poses, str(out))
+        records = json.loads(out.read_text(encoding="utf-8"))
+        assert len(records) == 3
+        for orig, rec in zip(poses, records):
+            assert np.array(rec["keypoints"]).shape == (NUM_KEYPOINTS, 2)
+            assert len(rec["scores"]) == NUM_KEYPOINTS
+            np.testing.assert_allclose(rec["keypoints"], orig.keypoints)
+            np.testing.assert_allclose(rec["scores"], orig.scores)
+
+    def test_single_pose_creates_parent_dir(self, tmp_path):
+        out = tmp_path / "nested" / "one.json"
+        export_keypoints_2d(_make_pose2d(seed=7), str(out))
+        assert out.exists()
+        assert len(json.loads(out.read_text(encoding="utf-8"))) == 1

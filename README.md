@@ -85,6 +85,9 @@ uv sync          # pyproject.toml + uv.lock 의 고정 버전 그대로 설치
 - 결과물은 모두 `output/` 에 저장됩니다(`.gitignore` 대상이라 지워도 재실행하면 다시 생성).
 - 공통 옵션: `--device cuda`(기본, GPU 미감지 시 자동 CPU 폴백) / `--device cpu`(CPU 강제) ·
   `--num-frames N`(길이·속도 조절). 실제 GPU 가속은 1회 셋업이 필요합니다((참고) GPU 가속).
+- 각 데모는 키포인트도 파일로 저장합니다: #2는 2D(`output/realtime_keypoints2d.json`), 3-A·3-B는
+  3D(`output/*_pose3d.json`). `--keypoints`로 경로를, 3D는 `--keypoints-format npy`로 포맷을 바꿉니다.
+  스키마와 직접 소비 방법은 아래 **(참고) 파이프라인 인프로세스 사용**.
 
 | # | 데모 | 스크립트 | 입력 준비물 | 한 줄 실행 예 | 산출물 |
 |---|---|---|---|---|---|
@@ -278,6 +281,37 @@ uv run python run.py --live --max-frames 300 # N프레임 처리 후 정지
 - 현재 라이브 경로는 삼각측량 전용입니다(`depth_map=None`).
 - `--max-frames` 는 웹캠 무한 루프를 끊는 상한입니다. 라이브 창은 디스플레이가 없는 환경(원격 SSH 등)에선 뜨지 않습니다.
 - 프레임마다 matplotlib로 3D를 그려서 대략 15~20 FPS가 상한이고, CPU 검출이면 더 느립니다(GPU 권장).
+
+---
+
+## (참고) 파이프라인 인프로세스 사용 (후속 개발용)
+
+후속 프로그램에 3D 결과를 넘기는 가장 간단한 방법은, 파일을 거치지 않고 파이프라인을 import해서
+`Pipeline.process(...)`가 돌려주는 `Pose3D`를 바로 쓰는 것입니다.
+
+```python
+import numpy as np
+from src.pipeline import Pipeline
+
+pipe = Pipeline.from_config("config/cameras.yaml")   # 또는 Pipeline(config, cameras)
+
+# 프레임마다: 뷰별 2D를 직접 준비하거나(외부 검출기) pipe.detect_2d(frameset)로 얻는다.
+#   keypoints: (V, 17, 2) 픽셀 (u,v) · scores: (V, 17) in [0,1] · 순서는 pipe.cameras
+pose = pipe.process(keypoints, scores, depth_map=None, timestamp=t)
+
+# pose: Pose3D (world 좌표, meter, COCO-17)
+#   pose.points (17,3) · pose.scores (17) · pose.valid (17 bool) · pose.source (17 str)
+for k in range(17):
+    if pose.valid[k]:                 # 반드시 valid 확인 (invalid은 NaN일 수 있음)
+        x, y, z = pose.points[k]      # meter, world frame
+```
+
+- **COCO-17 순서 고정**: `0 nose … 16 right_ankle`(`src/core/types.py`의 `COCO_17_KEYPOINTS`).
+- **`valid`를 먼저 확인**: 복원 실패 관절의 `points`는 의미 없음(주로 NaN).
+- **`source`**: 관절 출처(`triangulation`/`depth`/`fused`/`missing`).
+- 파일 경유가 편하면 `run.py`나 데모가 낸 JSON/NPY를 `src.io.keypoints_io`의 `load_keypoints`(3D)로
+  다시 `Pose3D`로 로드합니다. 2D는 `export_keypoints_2d`가 낸 단순 JSON(프레임별 `keypoints`/`scores`)이라
+  일반 JSON 파서로 바로 읽으면 됩니다.
 
 ---
 
