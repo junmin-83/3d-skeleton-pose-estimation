@@ -69,6 +69,55 @@ def render_pose3d_frame(
     return cv2.resize(bgr, out_size)
 
 
+# Per-joint provenance colours (matplotlib names), matching ``Pose3D.source``
+# tags emitted by depth fusion. Used by the hybrid fusion demo to show, per
+# joint, which sensor produced it.
+SOURCE_COLORS: dict[str, str] = {
+    "fused": "limegreen",          # triangulation + depth averaged
+    "depth": "deepskyblue",        # depth back-projection only (RGB occluded)
+    "triangulation": "crimson",    # multi-view RGB only (depth missing)
+}
+
+
+def render_pose3d_by_source(
+    fig,
+    ax,
+    pose: Pose3D,
+    lims,
+    out_size: tuple[int, int],
+    *,
+    point_size: int = 22,
+    view_init: tuple[float, float] | None = None,
+    bone_color: str = "dimgray",
+) -> np.ndarray:
+    """Like :func:`render_pose3d_frame`, but colour each joint by ``pose.source``.
+
+    fused -> green, depth -> blue, triangulation -> red (per :data:`SOURCE_COLORS`);
+    invalid joints and bones touching them are skipped. This makes the hybrid
+    fusion visible: which joints came from depth fill-in, which from multi-view
+    triangulation, and which from averaging both.
+    """
+    ax.cla()
+    pts, valid = pose.points, pose.valid
+    src = list(pose.source) if len(pose.source) == len(valid) else ["missing"] * len(valid)
+    _draw_bones(ax, pts, valid, bone_color, 1.5)
+    for name, colour in SOURCE_COLORS.items():
+        mask = valid & np.array([s == name for s in src], dtype=bool)
+        if mask.any():
+            ax.scatter(*pts[mask].T, c=colour, s=point_size, label=name)
+    ax.set_xlim(*lims[0])
+    ax.set_ylim(*lims[1])
+    ax.set_zlim(*lims[2])
+    ax.set_xlabel("X(m)")
+    ax.set_ylabel("Y(m)")
+    ax.set_zlabel("Z(m)")
+    if view_init is not None:
+        ax.view_init(elev=view_init[0], azim=view_init[1])
+    fig.canvas.draw()
+    bgr = cv2.cvtColor(np.asarray(fig.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
+    return cv2.resize(bgr, out_size)
+
+
 # ---------------------------------------------------------------------------
 # PNG plotting (one-off, equal aspect)
 # ---------------------------------------------------------------------------

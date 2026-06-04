@@ -1,4 +1,4 @@
-# 3D 스켈레톤 포즈 추정 (RGB 2대 + RGB-D 1대)
+# 3D 스켈레톤 포즈 추정 (RGB 2대 + RGB-D 1대 가정)
 
 RGB 카메라 2대와 RGB-D 카메라 1대로 한 사람의 **3D 스켈레톤 포즈**(COCO-17)를 추정합니다.
 단안(monocular)의 depth 모호성은 다중 뷰 **confidence 가중 삼각측량**으로 해소하고, depth 센서로
@@ -19,8 +19,8 @@ scale 보정·가려진 관절 보완을 하는 하이브리드 방식입니다.
 ```
 
 > 이 README는 **(1) 환경 구축**, **(2) 실시간 2D pose 추출 데모**, **(3) 실제 영상에서 depth까지
-> 활용한 3D pose → MP4 데모** 3가지 실행법을 다룹니다. 모든 명령은 **프로젝트 루트**에서 실행하고
-> 산출물은 `output/`에 저장됩니다.
+> 활용한 3D pose → MP4 데모**, 그리고 **(3-C) RGB+Depth 융합(hybrid) 합성 데모** 실행법을 다룹니다.
+> 모든 명령은 **프로젝트 루트**에서 실행하고 산출물은 `output/`에 저장됩니다.
 
 ---
 
@@ -33,15 +33,19 @@ scale 보정·가려진 관절 보완을 하는 하이브리드 방식입니다.
 # 2) 실시간 2D 17키포인트 — 사람 사진 1장이면 끝 (가장 빠른 시작)
 uv run python examples/realtime_demo.py --frames 30
 #    -> output/realtime_keypoints.mp4  (+ 마지막 프레임 .png)
-#    웹캠 라이브: uv run python examples/realtime_demo.py --camera 0 --frames 200
+#    웹캠 라이브: uv run python examples/realtime_demo.py --camera 0 --frames 60
 
 # 3-A) RGB-D depth로 3D pose -> MP4  (TUM 영상; §3-A ①에서 다운로드)
-uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 60
+uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 600
 #    -> output/rgbd_pose3d.mp4   ([RGB+2D | Depth | 3D] 3분할)
 
 # 3-B) 멀티뷰 HD 삼각측량으로 3D pose -> MP4  (CMU Panoptic; §3-B ①에서 다운로드)
 uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 --cams 00_03,00_12,00_23 --start 500 --num-frames 60
 #    -> output/panoptic_video_pose3d.mp4   ([HD 뷰 3개 2D | 3D])
+
+# 3-C) (합성) RGB+Depth 융합 = hybrid fused 경로  (다운로드·rtmlib·GPU 불필요)
+uv run python examples/fusion_demo.py --num-frames 80
+#    -> output/fusion_pose3d.mp4   ([cam0 2D | cam1 2D | Depth | 3D 출처색: fused=초록/depth=파랑/tri=빨강])
 ```
 
 > - **디바이스:** 기본 `cuda`. GPU 셋업(아래 **(참고) GPU 가속**)을 했고 `UV_NO_SYNC=1`이면 위 명령이
@@ -89,10 +93,9 @@ uv sync          # pyproject.toml + uv.lock 의 고정 버전 그대로 설치
 | # | 데모 | 스크립트 | 입력 준비물 | 한 줄 실행 예 | 산출물 |
 |---|---|---|---|---|---|
 | 2 | 실시간 2D 키포인트 | `examples/realtime_demo.py` | 사람 사진 1장(소) 또는 웹캠 | `uv run python examples/realtime_demo.py --frames 30` | `output/realtime_keypoints.mp4` |
-| 3-A | RGB-D depth 3D | `examples/rgbd_video_demo.py` | RGB-D 영상(TUM ~422MB) 또는 RealSense | `uv run python examples/rgbd_video_demo.py --tum <dir> --num-frames 60` | `output/rgbd_pose3d.mp4` |
+| 3-A | RGB-D depth 3D | `examples/rgbd_video_demo.py` | RGB-D 영상(TUM ~422MB) 또는 RealSense | `uv run python examples/rgbd_video_demo.py --tum <dir> --num-frames 600` | `output/rgbd_pose3d.mp4` |
 | 3-B | 멀티뷰 HD 3D | `examples/panoptic_video_demo.py` | Panoptic HD 3대(~8.6GB) | `uv run python examples/panoptic_video_demo.py --seq-dir <dir> --cams 00_03,00_12,00_23` | `output/panoptic_video_pose3d.mp4` |
-
-> **가장 빠른 시작은 2번**입니다(사람 사진 1장만 받으면 끝). 3-A·3-B는 데이터 다운로드가 필요하며, 각 섹션의 **① 데이터 준비 → ② 실행** 순서를 따르세요.
+| 3-C | (합성) RGB+Depth 융합 | `examples/fusion_demo.py` | 없음(합성) | `uv run python examples/fusion_demo.py --num-frames 80` | `output/fusion_pose3d.mp4` |
 
 ---
 
@@ -206,6 +209,26 @@ uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pos
 `CMU-Perceptual-Computing-Lab/panoptic-toolbox` → `./scripts/getData.sh 171204_pose1 0 3`
 (느리면 `--snu-endpoint`).
 
+### 3-C. (합성) RGB+Depth 융합 — hybrid `fused` 경로 (`examples/fusion_demo.py`)
+
+3-A(depth-only)·3-B(triangulation-only)는 3D 복원의 한쪽 경로만 시연합니다. 이 프로젝트의
+간판인 **다중 뷰 삼각측량 + depth back-projection을 관절별로 융합**하는 hybrid 경로
+(`Pipeline`의 `fuse`, `source='fused'`)는 "캘리브레이션된 다중 RGB 뷰 + 정렬 depth"를 동시에
+주는 공개 단일 데이터셋이 없어 실영상 데모에는 빠져 있습니다(TUM=단일 RGB-D, Panoptic=Kinect
+depth 미디코딩). 이 데모는 그 셋업을 **합성**으로 구성해 fused 경로를 눈으로 보여줍니다.
+
+**실행** (다운로드·rtmlib·GPU 불필요, 오프라인 결정론적):
+```bash
+uv run python examples/fusion_demo.py --num-frames 80
+```
+
+- 2 RGB + 1 RGB-D 카메라를 한 world 좌표계에 두고, 알려진 3D COCO-17(팔 흔들기)을 각 뷰에
+  투영해 2D+score와 RGB-D용 정렬 depth 맵을 만든 뒤 **진짜 `Pipeline`** 에 넣습니다.
+- 산출물 `output/fusion_pose3d.mp4`: `[cam0 2D | cam1 2D | Depth+2D | 3D(출처색)]` 4분할.
+  3D 관절은 출처로 색 구분 — **fused(초록)** 삼각측량+depth 평균 / **depth(파랑)** RGB 양쪽서
+  가려진(score↓) 오른손목을 depth가 보완 / **triangulation(빨강)** depth 맵에 구멍 난 왼발목을
+  RGB 삼각측량만으로 복원. 콘솔에 10프레임마다 `fused=… depth=… tri=… missing=…` 출력.
+
 ---
 
 ## (참고) GPU 가속 (NVIDIA CUDA)
@@ -307,6 +330,7 @@ examples/
   realtime_demo.py               (2) 실시간 2D 17키포인트 추출 (실제 RTMPose, MP4)
   rgbd_video_demo.py             (3-A) RGB-D depth 활용 3D → MP4
   panoptic_video_demo.py         (3-B) 멀티뷰 HD 삼각측량 3D → MP4
+  fusion_demo.py                 (3-C) (합성) RGB+Depth 융합 hybrid fused 경로 → MP4
 run.py                           실제 라이브/녹화 멀티뷰 엔트리포인트
 tests/                           수치 모듈 단위/통합 테스트
 data/, models/, output/          (gitignore) 데이터셋 / 모델 캐시 / 산출물
