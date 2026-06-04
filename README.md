@@ -260,6 +260,25 @@ calibration을 채운 뒤 실제 라이브 추론: `uv run python run.py --confi
 
 ---
 
+## (참고) 실시간 표시 (`run.py --live`)
+
+`run.py`에 `--live`를 주면 결과를 파일로만 저장하지 않고, 프레임마다 카메라별 2D 오버레이와 3D
+스켈레톤을 한 창에 띄웁니다. `q` 나 `Esc` 로 멈추고, 멈출 때 모은 포즈는 평소처럼 파일로도 저장됩니다.
+
+```bash
+uv run python run.py --live                  # 라이브 창 (q/Esc 종료)
+uv run python run.py --live --max-frames 300 # N프레임 처리 후 정지
+```
+
+- 카메라 2대 이상이 필요합니다. 기본 `cameras.yaml` 은 cam0(`source: 0`)·cam1(`source: 1`) 두 웹캠이고,
+  삼각측량이 `min_views=2` 라 한 대로는 3D가 나오지 않습니다(웹캠이 1대뿐이면 device 1 열기 실패로 에러).
+- 3D가 정확하려면 위 Calibration 절차로 실제 `R`·`t` 를 채워야 합니다(2D 오버레이는 캘리브와 무관하게 나옵니다).
+- 현재 라이브 경로는 삼각측량 전용입니다(`depth_map=None`).
+- `--max-frames` 는 웹캠 무한 루프를 끊는 상한입니다. 라이브 창은 디스플레이가 없는 환경(원격 SSH 등)에선 뜨지 않습니다.
+- 프레임마다 matplotlib로 3D를 그려서 대략 15~20 FPS가 상한이고, CPU 검출이면 더 느립니다(GPU 권장).
+
+---
+
 ## (참고) 설정 (`config/cameras.yaml`)
 
 | 섹션 | 주요 필드 |
