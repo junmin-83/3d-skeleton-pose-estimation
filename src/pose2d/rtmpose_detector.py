@@ -129,6 +129,32 @@ def apply_score_threshold(scores: np.ndarray, threshold: float) -> np.ndarray:
     return out
 
 
+def resolve_device(requested: str, available_providers: list[str]) -> str:
+    """Resolve the effective inference device, falling back to CPU.
+
+    ``"cuda"`` is the project default, but a CPU-only ``onnxruntime`` (the
+    default ``uv sync`` environment, or a machine with no NVIDIA GPU) exposes no
+    CUDA execution provider.  In that case ``"cuda"`` quietly falls back to
+    ``"cpu"`` so inference still runs instead of failing / spamming an
+    onnxruntime warning.  ``"cpu"`` is always honoured as-is.
+
+    Parameters
+    ----------
+    requested:
+        Device requested by the caller (``"cuda"`` or ``"cpu"``).
+    available_providers:
+        ``onnxruntime.get_available_providers()`` output.
+
+    Returns
+    -------
+    str
+        ``"cuda"`` only when a CUDA-capable provider is present, else ``"cpu"``.
+    """
+    if requested.lower() == "cuda" and any("CUDA" in p for p in available_providers):
+        return "cuda"
+    return "cpu"
+
+
 # ---------------------------------------------------------------------------
 # RTMPoseDetector — rtmlib imported lazily inside __init__
 # ---------------------------------------------------------------------------
@@ -187,13 +213,20 @@ class RTMPoseDetector:
 
         if device == "cuda":
             # Load CUDA/cuDNN DLLs from the nvidia-*-cu12 pip wheels so
-            # onnxruntime-gpu's CUDAExecutionProvider can initialize. Harmless
-            # no-op on CPU-only onnxruntime; falls back to CPU if unavailable.
+            # onnxruntime-gpu's CUDAExecutionProvider can initialize (harmless
+            # no-op on CPU-only onnxruntime), then drop to CPU when no CUDA
+            # provider is present so the default device="cuda" never hard-fails.
             try:
                 import onnxruntime as _ort
                 _ort.preload_dlls()
+                device = resolve_device(device, _ort.get_available_providers())
             except Exception:
-                pass
+                device = "cpu"
+            if device != "cuda":
+                print(
+                    "[RTMPoseDetector] CUDA provider unavailable -> using CPU. "
+                    "For GPU acceleration see README '(참고) GPU 가속 (NVIDIA CUDA)'."
+                )
 
         self.score_threshold = score_threshold
         self.device = device

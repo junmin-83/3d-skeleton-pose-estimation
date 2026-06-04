@@ -16,6 +16,7 @@ from src.pose2d.rtmpose_detector import (
     apply_score_threshold,
     best_person,
     normalize_rtmlib_output,
+    resolve_device,
 )
 from src.core.types import NUM_KEYPOINTS, Pose2D
 
@@ -194,3 +195,27 @@ class TestApplyScoreThreshold:
         out = apply_score_threshold(sc, 0.5)
         assert out is not sc
         np.testing.assert_array_equal(sc, [0.1, 0.9])
+
+
+# ---------------------------------------------------------------------------
+# resolve_device — GPU default with graceful CPU fallback
+# ---------------------------------------------------------------------------
+
+class TestResolveDevice:
+    _GPU = ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
+    _CPU = ["CPUExecutionProvider"]
+
+    def test_cuda_kept_when_cuda_provider_present(self):
+        assert resolve_device("cuda", self._GPU) == "cuda"
+
+    def test_cuda_falls_back_when_no_cuda_provider(self):
+        assert resolve_device("cuda", self._CPU) == "cpu"
+
+    def test_cuda_falls_back_on_empty_providers(self):
+        assert resolve_device("cuda", []) == "cpu"
+
+    def test_cpu_always_stays_cpu_even_with_gpu(self):
+        assert resolve_device("cpu", self._GPU) == "cpu"
+
+    def test_case_insensitive_request(self):
+        assert resolve_device("CUDA", self._GPU) == "cuda"

@@ -74,7 +74,8 @@ def _parse_args() -> argparse.Namespace:
     ap.add_argument("--image", default="data/demo/person.jpg", help="static image (looped) source.")
     ap.add_argument("--camera", type=int, default=None, help="webcam device index for true live mode.")
     ap.add_argument("--frames", type=int, default=30, help="number of frames to process.")
-    ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="inference device.")
+    ap.add_argument("--device", default="cuda", choices=["cpu", "cuda"],
+                    help="inference device (default cuda; auto-falls back to CPU if no GPU).")
     ap.add_argument("--mode", default="lightweight", help="rtmlib pose mode: lightweight|balanced|performance.")
     ap.add_argument("--score-thr", type=float, default=0.3,
                     help="keypoint confidence threshold; raise it to drop low-confidence (often wrong) joints.")

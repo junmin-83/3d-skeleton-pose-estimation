@@ -37,9 +37,10 @@ uv sync          # pyproject.toml + uv.lock 의 고정 버전 그대로 설치
 
 - `uv sync`는 lock 고정 버전(numpy/scipy/opencv/onnxruntime/rtmlib + dev: pytest/ruff)을 설치 →
   **재현성 보장**. 이후 `uv run ...` 은 실행 시 환경을 자동 동기화합니다.
-- **GPU(NVIDIA CUDA):** 기본은 CPU용 `onnxruntime`이라 추가 설치 없이 모든 데모가 CPU로 동작합니다.
-  NVIDIA GPU 가속(검출 약 8배)은 1회 설치가 필요하고 lock에 없으므로 **`uv run --no-sync`** 로 실행해야
-  합니다 → 아래 **(참고) GPU 가속 (NVIDIA CUDA)** 섹션 참고.
+- **GPU(NVIDIA CUDA)가 기본:** 모든 데모의 기본 디바이스는 `cuda`입니다. GPU 셋업이 안 된 환경(또는
+  GPU 없는 머신)에서는 자동으로 CPU로 폴백하므로 추가 설정 없이도 동작합니다. 실제 GPU 가속(검출 약
+  8배)은 **1회 셋업**이 필요합니다(`./scripts/setup-gpu.ps1` + `UV_NO_SYNC=1`) → 아래
+  **(참고) GPU 가속 (NVIDIA CUDA)**. CPU로 강제하려면 데모에 `--device cpu`.
 - **모델 캐시:** rtmlib RTMPose ONNX 모델은 `TORCH_HOME=./models`로 지정돼 **`./models/hub/checkpoints/`**
   에 받습니다(`src/pose2d/rtmpose_detector.py`에 하드코딩, env로 override). `models/`는 `.gitignore`.
 - **테스트:** `uv run pytest tests/ -q` (수치 모듈 단위·통합 테스트, rtmlib 없이 오프라인 통과).
@@ -50,10 +51,12 @@ uv sync          # pyproject.toml + uv.lock 의 고정 버전 그대로 설치
 
 `examples/` 폴더의 데모 3개는 모두 **프로젝트 루트에서** `uv run python examples/<파일>.py ...` 로 실행합니다.
 
-- `uv run` 이 환경을 자동 동기화하므로 `uv sync` 를 깜빡해도 됩니다.
+- `uv run` 은 기본적으로 실행 시 환경을 자동 동기화합니다(`uv sync` 를 깜빡해도 됨). 단, GPU 셋업을 한
+  머신은 `UV_NO_SYNC=1` 로 이 자동 동기화를 꺼서 GPU 환경이 유지됩니다 → (참고) GPU 가속.
 - **첫 실행 시** RTMPose ONNX 모델이 `./models/hub/checkpoints/` 에 자동 다운로드됩니다(수십 초, 1회).
 - 결과물은 모두 `output/` 에 저장됩니다(`.gitignore` 대상 — 지워도 데모 재실행 시 다시 생성).
-- 공통 옵션: `--device cpu`(기본) 또는 `--device cuda`(GPU), `--num-frames N`(길이·속도 조절).
+- 공통 옵션: `--device cuda`(**기본**; GPU 미감지 시 자동 CPU 폴백) / `--device cpu`(CPU 강제) ·
+  `--num-frames N`(길이·속도 조절). 실제 GPU 가속은 1회 셋업 필요 → (참고) GPU 가속.
 
 | # | 데모 | 스크립트 | 입력 준비물 | 한 줄 실행 예 | 산출물 |
 |---|---|---|---|---|---|
@@ -84,8 +87,8 @@ uv run python examples/realtime_demo.py --frames 30
 # (b) 실제 웹캠 라이브 (장치 0번, 200프레임)
 uv run python examples/realtime_demo.py --camera 0 --frames 200
 
-# (c) GPU 고속 (GPU 1회 설치 후 — (참고) GPU 가속 섹션, --no-sync 필수)
-uv run --no-sync python examples/realtime_demo.py --camera 0 --device cuda --mode balanced
+# (c) CPU로 강제 (기본은 GPU; CPU 비교용)
+uv run python examples/realtime_demo.py --camera 0 --device cpu --mode balanced
 ```
 
 옵션: `--image <경로>` · `--mode lightweight|balanced|performance` · `--score-thr <0~1>`(올리면
@@ -121,16 +124,15 @@ tar -xzf data/tum/sitting_static.tgz -C data/tum
 
 **② 실행** (OS 공통):
 ```bash
-# CPU — 추가 설치 없이 바로 동작 (짧게 보려면 --num-frames 20)
+# 기본 = GPU (셋업 시) · GPU 없으면 자동 CPU 폴백 · 짧게 보려면 --num-frames 20
 uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 60
-# GPU — 1회 설치 후 ((참고) GPU 가속 섹션), --no-sync + --device cuda
-uv run --no-sync python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 60 --device cuda
+# CPU로 강제: 끝에 --device cpu 추가
 ```
 
 - 산출물: `output/rgbd_pose3d.mp4`. 콘솔에 10프레임마다 `N/17 joints from depth` 출력.
 - **단일 인물 시퀀스 권장**: `detect_best`가 최고신뢰 1명만 추적하므로 다인 장면에선 프레임마다 대상이 바뀌어 튈 수 있음.
 - **Intel RealSense 라이브**(pyrealsense2 필요): `uv run python examples/rgbd_video_demo.py --realsense --num-frames 300`
-  (컬러에 정렬된 depth + intrinsics를 자동 사용; GPU는 `uv run --no-sync ... --device cuda`).
+  (컬러에 정렬된 depth + intrinsics 자동 사용; 기본 GPU, CPU는 `--device cpu`).
 - 옵션: `--depth-min/--depth-max`(유효 depth 범위, m) · `--mode` · `--fps`.
 - TUM intrinsics(freiburg3: fx=535.4, fy=539.2, cx=320.1, cy=247.6, depth/5000=m)는 코드에 내장.
 
@@ -168,10 +170,8 @@ done
 
 **② 실행** (OS 공통):
 ```bash
-# CPU — 바로 동작
+# 기본 = GPU (셋업 시) · GPU 없으면 자동 CPU 폴백 · CPU 강제는 --device cpu
 uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 --cams 00_03,00_12,00_23 --start 500 --num-frames 60
-# GPU — 1회 설치 후 ((참고) GPU 가속 섹션), --no-sync + --device cuda
-uv run --no-sync python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 --cams 00_03,00_12,00_23 --start 500 --num-frames 60 --device cuda
 ```
 
 산출물: `output/panoptic_video_pose3d.mp4`. 대안 다운로드: 툴박스
@@ -182,38 +182,37 @@ uv run --no-sync python examples/panoptic_video_demo.py --seq-dir data/panoptic/
 
 ## (참고) GPU 가속 (NVIDIA CUDA)
 
-기본 환경은 CPU `onnxruntime`이라 모든 데모가 추가 설치 없이 동작합니다. NVIDIA GPU(예: RTX 4050)에서
-RTMPose 검출을 가속하려면(측정 약 **8배** — CPU ~9.6 FPS → GPU ~78 FPS) 아래 1회 설치 후 반드시
-**`uv run --no-sync`** 로 실행하세요.
+데모의 기본 디바이스는 `cuda`입니다. **GPU 셋업이 된 머신**에서는 그냥 `uv run python examples/...` 가
+GPU로 돌고, **셋업이 안 된 환경**(또는 GPU 없는 머신)에서는 자동으로 CPU로 폴백합니다(검출기의
+`resolve_device`가 결정). 측정 약 **8배** — CPU ~9.6 FPS → GPU ~78 FPS(RTX 4050).
 
-**왜 `--no-sync`?** GPU 패키지(onnxruntime-gpu + nvidia CUDA 휠)는 크로스플랫폼 재현용 `uv.lock`의
-기본(default) 설치에 포함되지 않습니다(CPU 기준). 그래서 그냥 `uv run` 하면 uv가 환경을 lock으로
-**재동기화하며 CPU `onnxruntime`으로 되돌립니다**. GPU 실행은 반드시 `uv run --no-sync` 를 쓰세요.
-
-**1회 설치** (Windows x86_64 · CUDA 12 · cuDNN 9.11):
-```bash
-# rtmlib이 끌어온 CPU onnxruntime을 먼저 제거 (둘 다 같은 import 경로라 공존 불가)
-uv pip uninstall onnxruntime
-# GPU 런타임 + CUDA 12 휠 설치 (cuDNN은 9.12+ 회피 — 아래 주의)
-uv pip install onnxruntime-gpu "nvidia-cudnn-cu12<9.12" nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12
+### 1회 셋업 (Windows x86_64 · CUDA 12 · cuDNN 9.11)
+```powershell
+# (a) GPU 패키지 설치/복구 — 한 방에 (onnxruntime-gpu + CUDA 12 휠, cuDNN<9.12 핀, CUDA provider 검증)
+./scripts/setup-gpu.ps1
+# (b) uv run 이 환경을 CPU로 되돌리지 않도록 자동 동기화 끄기 (1회, 새 터미널부터 적용)
+[Environment]::SetEnvironmentVariable("UV_NO_SYNC", "1", "User")
 ```
-> 동일 버전이 `pyproject.toml`의 `gpu` 의존성 그룹과 `uv.lock`(Windows x86_64 마커)에 핀으로 기록돼
-> 있습니다. `uv sync --group gpu` 로 한 번에 설치할 수도 있으나, 그 경우에도 위처럼 CPU `onnxruntime`
-> 제거가 필요합니다.
+이후 데모는 플래그 없이 GPU로 실행되고, CPU로 비교하려면 `--device cpu` 만 붙이면 됩니다
+(onnxruntime-gpu가 CPU provider도 포함하므로 패키지 교체 불필요).
 
-**실행** — 데모에 `--no-sync` + `--device cuda`:
-```bash
-uv run --no-sync python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 60 --device cuda
-uv run --no-sync python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 --cams 00_03,00_12,00_23 --start 500 --num-frames 60 --device cuda
-```
+### ⚠️ `uv sync` 로는 GPU가 안 됩니다 (검증됨)
+`rtmlib` 이 CPU `onnxruntime` 을 **강제 의존**하는데 uv 로는 이 전이 의존성을 뺄 방법이 없고, CPU
+`onnxruntime` 과 `onnxruntime-gpu` 는 **같은 `onnxruntime/` 폴더**에 설치돼 공존이 불가합니다 — 둘을
+같이 깔면 CUDA provider가 사라집니다(실측: `[Tensorrt, CUDA, CPU]` → `[Azure, CPU]`). 따라서 `uv sync`
+도, `uv sync --group gpu` 도 GPU를 깨뜨립니다.
+- 그래서 `UV_NO_SYNC=1` 로 `uv run` 의 **자동** 동기화를 꺼 GPU 환경을 유지합니다.
+- `uv sync` 를 직접 돌려 CPU로 되돌아갔다면 **`./scripts/setup-gpu.ps1` 한 번**으로 복구됩니다.
+- `pyproject.toml`/`uv.lock` 의 `gpu` 그룹은 **버전 핀 참고용**입니다(설치는 위 스크립트 사용).
 
-**주의 · 동작 원리**
+### 주의 · 동작 원리
 - **cuDNN 9.12+ 비호환:** cuDNN 9.23은 onnxruntime 1.26의 CUDA provider에서 `CUDNN_BACKEND_API_FAILED`로
-  실패해 조용히 CPU로 폴백합니다. 반드시 **`nvidia-cudnn-cu12<9.12`**(검증판 9.11.1.4)을 쓰세요.
-- **DLL 자동 로드:** `src/pose2d/rtmpose_detector.py`가 `device="cuda"`일 때 `onnxruntime.preload_dlls()`로
-  nvidia 휠의 CUDA/cuDNN DLL을 로드합니다(CPU에선 무해한 no-op, 실패 시 CPU 폴백).
-- **확인:** 데모 로그에서 검출 FPS가 크게 오르면 GPU 사용 중. `cublasLt64_12.dll ... missing` 류 에러가
-  나면 위 nvidia 휠 설치가 빠진 것이니 다시 설치하세요.
+  실패해 조용히 CPU로 폴백합니다. 반드시 **`nvidia-cudnn-cu12<9.12`**(검증판 9.11.1.4) — 스크립트가 핀.
+- **DLL 자동 로드 + 폴백:** `src/pose2d/rtmpose_detector.py`가 `device="cuda"`일 때
+  `onnxruntime.preload_dlls()`로 nvidia 휠의 CUDA/cuDNN DLL을 로드하고, CUDA provider가 없으면 자동으로
+  CPU로 폴백합니다(그래서 기본 `cuda`가 GPU 없는 환경에서도 안전).
+- **확인:** `./scripts/setup-gpu.ps1` 가 끝에 provider 목록과 `GPU ready` 를 출력합니다.
+  `cublasLt64_12.dll ... missing` 류 에러가 나면 nvidia 휠 설치가 빠진 것이니 스크립트를 다시 실행하세요.
 
 ---
 

@@ -153,7 +153,8 @@ def main() -> None:
     ap.add_argument("--realsense", action="store_true", help="Intel RealSense live (needs pyrealsense2).")
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--num-frames", type=int, default=60)
-    ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
+    ap.add_argument("--device", default="cuda", choices=["cpu", "cuda"],
+                    help="inference device (default cuda; auto-falls back to CPU if no GPU).")
     ap.add_argument("--mode", default="balanced")
     ap.add_argument("--depth-min", type=float, default=0.3)
     ap.add_argument("--depth-max", type=float, default=5.0)

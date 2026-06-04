@@ -110,7 +110,8 @@ def main() -> None:
     ap.add_argument("--cams", default="00_03,00_12,00_23", help="comma-separated HD camera names.")
     ap.add_argument("--start", type=int, default=0, help="start HD frame index.")
     ap.add_argument("--num-frames", type=int, default=60)
-    ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
+    ap.add_argument("--device", default="cuda", choices=["cpu", "cuda"],
+                    help="inference device (default cuda; auto-falls back to CPU if no GPU).")
     ap.add_argument("--mode", default="balanced")
     ap.add_argument("--fps", type=float, default=30.0)
     ap.add_argument("--video", default="output/panoptic_video_pose3d.mp4")

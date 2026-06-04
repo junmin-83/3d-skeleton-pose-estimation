@@ -21,13 +21,15 @@ dev = [
     "pytest>=7.4",
     "ruff>=0.1",
 ]
-# Optional NVIDIA CUDA GPU acceleration. Pins the exact, verified-working set for the
-# project's target platform (Windows x86_64). NOT installed by the default `uv sync`,
-# and NOT a clean drop-in: onnxruntime-gpu and the CPU onnxruntime (pulled in transitively
-# by rtmlib) install to the SAME `onnxruntime` import path, so the CPU build must be
-# uninstalled first. cuDNN is pinned <9.12 because 9.12+ (e.g. 9.23) breaks onnxruntime
-# 1.26's CUDA provider (CUDNN_BACKEND_API_FAILED -> silent CPU fallback). See the
-# "(참고) GPU 가속 (NVIDIA CUDA)" section in README.md for the exact install + run steps.
+# Version-pin reference for NVIDIA CUDA GPU acceleration (Windows x86_64). This group is
+# NOT a working install path: `uv sync --group gpu` also keeps the CPU onnxruntime that
+# rtmlib pulls in transitively, and onnxruntime + onnxruntime-gpu share the SAME
+# `onnxruntime/` folder, which kills the CUDA provider (verified: [Tensorrt,CUDA,CPU] ->
+# [Azure,CPU]). uv cannot drop that transitive CPU dep. To actually enable GPU, run
+# `./scripts/setup-gpu.ps1` (uninstalls CPU onnxruntime, installs this stack, verifies
+# CUDA) and set UV_NO_SYNC=1 so `uv run` does not auto-revert. cuDNN is pinned <9.12
+# because 9.12+ (e.g. 9.23) breaks onnxruntime 1.26's CUDA provider
+# (CUDNN_BACKEND_API_FAILED -> silent CPU fallback). See README "(참고) GPU 가속".
 gpu = [
     "onnxruntime-gpu>=1.26,<2.0 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
     "nvidia-cudnn-cu12>=9.11,<9.12 ; sys_platform == 'win32' and platform_machine == 'AMD64'",
