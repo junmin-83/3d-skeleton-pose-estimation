@@ -79,11 +79,6 @@ class CameraParams:
         """(3, 4) projection matrix ``K [R | t]`` (world -> pixel)."""
         return self.K @ np.hstack([self.R, self.t.reshape(3, 1)])
 
-    @property
-    def center(self) -> np.ndarray:
-        """Camera centre in **world** coordinates: ``-R^T t`` (meters)."""
-        return -self.R.T @ self.t
-
 
 @dataclass
 class DepthCameraParams(CameraParams):

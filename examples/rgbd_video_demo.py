@@ -104,8 +104,13 @@ def render_3d(fig, ax, pose, lims):
             ax.plot(*[[pts[i, a], pts[j, a]] for a in range(3)], c="royalblue", lw=2)
     if valid.any():
         ax.scatter(*pts[valid].T, c="royalblue", s=18)
-    ax.set_xlim(*lims[0]); ax.set_ylim(*lims[1]); ax.set_zlim(*lims[2])
-    ax.set_xlabel("X(m)"); ax.set_ylabel("Y(m)"); ax.set_zlabel("Z(m)"); ax.view_init(elev=-75, azim=-90)
+    ax.set_xlim(*lims[0])
+    ax.set_ylim(*lims[1])
+    ax.set_zlim(*lims[2])
+    ax.set_xlabel("X(m)")
+    ax.set_ylabel("Y(m)")
+    ax.set_zlabel("Z(m)")
+    ax.view_init(elev=-75, azim=-90)
     fig.canvas.draw()
     return cv2.resize(cv2.cvtColor(np.asarray(fig.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR), (PW, PH))
 
@@ -167,7 +172,8 @@ def main() -> None:
     elif args.realsense:
         frames = _realsense_frames(args.num_frames)
     else:
-        print("[rgbd] specify --tum <dir> or --realsense"); sys.exit(1)
+        print("[rgbd] specify --tum <dir> or --realsense")
+        sys.exit(1)
 
     detector = RTMPoseDetector(device=args.device, mode=args.mode, score_threshold=0.3)
     smoother = PoseSmoother(NUM_KEYPOINTS, freq=args.fps, min_cutoff=1.0, beta=0.01, d_cutoff=1.0)
@@ -208,8 +214,10 @@ def main() -> None:
         n += 1
 
     if writer is None:
-        print("[rgbd] no frames processed."); sys.exit(1)
-    writer.release(); plt.close(fig)
+        print("[rgbd] no frames processed.")
+        sys.exit(1)
+    writer.release()
+    plt.close(fig)
     print(f"[rgbd] result video ({n} frames) -> {video_path}")
 
 

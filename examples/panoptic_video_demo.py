@@ -91,8 +91,12 @@ def render_3d(fig, ax, pose, lims):
             ax.plot(*[[pts[i, a], pts[j, a]] for a in range(3)], c="royalblue", lw=2)
     if valid.any():
         ax.scatter(*pts[valid].T, c="royalblue", s=20)
-    ax.set_xlim(*lims[0]); ax.set_ylim(*lims[1]); ax.set_zlim(*lims[2])
-    ax.set_xlabel("X(m)"); ax.set_ylabel("Y(m)"); ax.set_zlabel("Z(m)")
+    ax.set_xlim(*lims[0])
+    ax.set_ylim(*lims[1])
+    ax.set_zlim(*lims[2])
+    ax.set_xlabel("X(m)")
+    ax.set_ylabel("Y(m)")
+    ax.set_zlabel("Z(m)")
     fig.canvas.draw()
     bgr = cv2.cvtColor(np.asarray(fig.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
     return cv2.resize(bgr, (PW, PH))
@@ -125,7 +129,8 @@ def main() -> None:
     caps = [cv2.VideoCapture(str(seq / "hdVideos" / f"hd_00_{n.split('_')[1]}.mp4")) for n in names]
     for cap, n in zip(caps, names):
         if not cap.isOpened():
-            print(f"[panoptic-vid] cannot open hdVideos/hd_00_{n.split('_')[1]}.mp4"); sys.exit(1)
+            print(f"[panoptic-vid] cannot open hdVideos/hd_00_{n.split('_')[1]}.mp4")
+            sys.exit(1)
         cap.set(cv2.CAP_PROP_POS_FRAMES, args.start)
     print(f"[panoptic-vid] {len(cams)} views {names} | device={args.device} | "
           f"frames {args.start}..{args.start + args.num_frames}")
@@ -148,9 +153,11 @@ def main() -> None:
             ok, img = cap.read()
             frames.append(img if ok else None)
         if any(im is None for im in frames):
-            print(f"[panoptic-vid] stream ended at frame {f}"); break
+            print(f"[panoptic-vid] stream ended at frame {f}")
+            break
 
-        kpts = np.zeros((len(cams), 17, 2)); scores = np.zeros((len(cams), 17))
+        kpts = np.zeros((len(cams), 17, 2))
+        scores = np.zeros((len(cams), 17))
         for v, img in enumerate(frames):
             pose2d = detector.detect_best(img)
             kpts[v], scores[v] = pose2d.keypoints, pose2d.scores
