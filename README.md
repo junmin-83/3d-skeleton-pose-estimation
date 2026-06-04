@@ -283,6 +283,11 @@ uv run python examples/mvor_fusion_demo.py \
   `--num-frames` · `--depth-min/--depth-max` · `--depth-scale`(raw→m 나눗셈, 기본 1000) ·
   `--device cpu|cuda` · `--video`.
 - MVOR은 다인 장면이라 단일 인물 가정상 RTMPose `detect_best`가 최고신뢰 1명만 잡습니다.
+- **실측 확인 (MVOR day1):** 실데이터에서 정상 동작 — RTMPose 실검출 + 실depth로 fused 경로가
+  돌아갑니다. 출력은 `1280×240` 4분할 MP4(패널 320×240 ×4, 10 fps). 출처 카운트는 실제 OR
+  장면(다인·임상 가림) 특성상 프레임별로 변동합니다 — 예: `f0 fused=2 depth=2 tri=3 missing=10`,
+  `f10 fused=15 depth=0 tri=0 missing=2`(추적 인물이 일부 시야 밖이면 missing↑). GPU가 없으면
+  검출기가 자동으로 CPU로 폴백합니다.
 
 ---
 
