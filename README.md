@@ -1,4 +1,4 @@
-# 3D 스켈레톤 포즈 추정 (RGB 2대 + RGB-D 1대 가정)
+# 3D 스켈레톤 포즈 추정 (RGB 2대 + RGB-D 1대)
 
 RGB 카메라 2대와 RGB-D 카메라 1대로 한 사람의 **3D 스켈레톤 포즈**(COCO-17)를 추정합니다.
 단안(monocular)의 depth 모호성은 다중 뷰 **confidence 가중 삼각측량**으로 해소하고, depth 센서로
@@ -19,8 +19,8 @@ scale 보정·가려진 관절 보완을 하는 하이브리드 방식입니다.
 ```
 
 > 이 README는 **(1) 환경 구축**, **(2) 실시간 2D pose 추출 데모**, **(3) 실제 영상에서 depth까지
-> 활용한 3D pose → MP4 데모**, 그리고 **(3-C) RGB+Depth 융합(hybrid) — 합성(3-C)·실제 MVOR(3-C′)** 실행법을 다룹니다.
-> 모든 명령은 **프로젝트 루트**에서 실행하고 산출물은 `output/`에 저장됩니다.
+> 활용한 3D pose → MP4 데모** 3가지 실행법을 다룹니다. 모든 명령은 **프로젝트 루트**에서 실행하고
+> 산출물은 `output/`에 저장됩니다.
 
 ---
 
@@ -33,19 +33,15 @@ scale 보정·가려진 관절 보완을 하는 하이브리드 방식입니다.
 # 2) 실시간 2D 17키포인트 — 사람 사진 1장이면 끝 (가장 빠른 시작)
 uv run python examples/realtime_demo.py --frames 30
 #    -> output/realtime_keypoints.mp4  (+ 마지막 프레임 .png)
-#    웹캠 라이브: uv run python examples/realtime_demo.py --camera 0 --frames 60
+#    웹캠 라이브: uv run python examples/realtime_demo.py --camera 0 --frames 200
 
 # 3-A) RGB-D depth로 3D pose -> MP4  (TUM 영상; §3-A ①에서 다운로드)
-uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 600
+uv run python examples/rgbd_video_demo.py --tum data/tum/rgbd_dataset_freiburg3_sitting_static --start 30 --num-frames 60
 #    -> output/rgbd_pose3d.mp4   ([RGB+2D | Depth | 3D] 3분할)
 
 # 3-B) 멀티뷰 HD 삼각측량으로 3D pose -> MP4  (CMU Panoptic; §3-B ①에서 다운로드)
 uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pose1 --cams 00_03,00_12,00_23 --start 500 --num-frames 60
 #    -> output/panoptic_video_pose3d.mp4   ([HD 뷰 3개 2D | 3D])
-
-# 3-C) (합성) RGB+Depth 융합 = hybrid fused 경로  (다운로드·rtmlib·GPU 불필요)
-uv run python examples/fusion_demo.py --num-frames 80
-#    -> output/fusion_pose3d.mp4   ([cam0 2D | cam1 2D | Depth | 3D 출처색: fused=초록/depth=파랑/tri=빨강])
 ```
 
 > - **디바이스:** 기본 `cuda`. GPU 셋업(아래 **(참고) GPU 가속**)을 했고 `UV_NO_SYNC=1`이면 위 명령이
@@ -93,10 +89,10 @@ uv sync          # pyproject.toml + uv.lock 의 고정 버전 그대로 설치
 | # | 데모 | 스크립트 | 입력 준비물 | 한 줄 실행 예 | 산출물 |
 |---|---|---|---|---|---|
 | 2 | 실시간 2D 키포인트 | `examples/realtime_demo.py` | 사람 사진 1장(소) 또는 웹캠 | `uv run python examples/realtime_demo.py --frames 30` | `output/realtime_keypoints.mp4` |
-| 3-A | RGB-D depth 3D | `examples/rgbd_video_demo.py` | RGB-D 영상(TUM ~422MB) 또는 RealSense | `uv run python examples/rgbd_video_demo.py --tum <dir> --num-frames 600` | `output/rgbd_pose3d.mp4` |
+| 3-A | RGB-D depth 3D | `examples/rgbd_video_demo.py` | RGB-D 영상(TUM ~422MB) 또는 RealSense | `uv run python examples/rgbd_video_demo.py --tum <dir> --num-frames 60` | `output/rgbd_pose3d.mp4` |
 | 3-B | 멀티뷰 HD 3D | `examples/panoptic_video_demo.py` | Panoptic HD 3대(~8.6GB) | `uv run python examples/panoptic_video_demo.py --seq-dir <dir> --cams 00_03,00_12,00_23` | `output/panoptic_video_pose3d.mp4` |
-| 3-C | (합성) RGB+Depth 융합 | `examples/fusion_demo.py` | 없음(합성) | `uv run python examples/fusion_demo.py --num-frames 80` | `output/fusion_pose3d.mp4` |
-| 3-C′ | (실제) MVOR RGB-D 융합 | `examples/mvor_fusion_demo.py` | MVOR 데이터셋(RGB-D ×3) | `uv run python examples/mvor_fusion_demo.py --mvor-root <dir> --json <json>` | `output/mvor_fusion_pose3d.mp4` |
+
+> **가장 빠른 시작은 2번**입니다(사람 사진 1장만 받으면 끝). 3-A·3-B는 데이터 다운로드가 필요하며, 각 섹션의 **① 데이터 준비 → ② 실행** 순서를 따르세요.
 
 ---
 
@@ -210,85 +206,6 @@ uv run python examples/panoptic_video_demo.py --seq-dir data/panoptic/171204_pos
 `CMU-Perceptual-Computing-Lab/panoptic-toolbox` → `./scripts/getData.sh 171204_pose1 0 3`
 (느리면 `--snu-endpoint`).
 
-### 3-C. (합성) RGB+Depth 융합 — hybrid `fused` 경로 (`examples/fusion_demo.py`)
-
-3-A(depth-only)·3-B(triangulation-only)는 3D 복원의 한쪽 경로만 시연합니다. 이 프로젝트의
-간판인 **다중 뷰 삼각측량 + depth back-projection을 관절별로 융합**하는 hybrid 경로
-(`Pipeline`의 `fuse`, `source='fused'`)는 "캘리브레이션된 다중 RGB 뷰 + 정렬 depth"를 동시에
-주는 공개 단일 데이터셋이 없어 실영상 데모에는 빠져 있습니다(TUM=단일 RGB-D, Panoptic=Kinect
-depth 미디코딩). 이 데모는 그 셋업을 **합성**으로 구성해 fused 경로를 눈으로 보여줍니다.
-출력: `[cam0 RGB+2D | cam1 RGB+2D | RGB-D depth+2D | 3D(출처색)]` 4분할 MP4.
-
-> 이 경로는 **합성 기하 데모**입니다(알려진 3D를 투영해 입력을 만들므로 RTMPose 미사용).
-> **실픽셀 + 실depth 융합**은 캘리브된 멀티뷰 RGB + 정렬 depth를 한 좌표계로 묶어야 하는데,
-> 바로 그 조합을 주는 공개 데이터셋이 **MVOR**입니다 → 아래 **3-C′** (`examples/mvor_fusion_demo.py`)에
-> 실데이터 경로를 구현해 뒀습니다.
-
-**① 데이터 준비** — **없음**. 합성이라 데이터셋 다운로드·모델 캐시·GPU가 모두 불필요하고
-오프라인에서 결정론적으로 실행됩니다(rtmlib도 import 안 함). 바로 ②로 가세요.
-
-**② 실행** (OS 공통):
-```bash
-# 다운로드·rtmlib·GPU 불필요 · 짧게 보려면 --num-frames 20 · CPU/GPU 무관
-uv run python examples/fusion_demo.py --num-frames 80
-```
-
-- 산출물: `output/fusion_pose3d.mp4`. 콘솔에 10프레임마다 `fused=… depth=… tri=… missing=…`
-  (관절 출처별 개수) 출력. 기본 시나리오는 매 프레임 `fused=15 depth=1 tri=1 missing=0`.
-- **합성 셋업:** RGB 2대(`cam0` 원점, `cam1` 기준선 0.6 m) + RGB-D 1대(`cam2`, 0.3 m)를 한
-  world 좌표계에 배치(공통 intrinsics fx=fy=600, 640×480). 알려진 3D COCO-17(오른팔 흔들기 +
-  좌우 sway)을 각 뷰에 투영해 per-view 2D+score를, RGB-D용으로 정렬 depth 맵을 만든 뒤
-  **진짜 `Pipeline`**(삼각측량+RANSAC → depth fusion → One-Euro 스무딩)에 그대로 넣습니다.
-- **출처 색 구분(3D 패널)** — 융합의 핵심을 한 장면에서 보여주려 관절별 출처를 색으로 구분:
-  - **fused(초록):** 두 RGB 뷰 + depth 모두 유효 → confidence 가중 평균(대부분 관절).
-  - **depth(파랑):** 두 RGB 뷰에서 가려진(score↓) **오른손목**을 depth가 보완 → README 제목의
-    "가려진 관절 보완". RGB 패널엔 손목이 안 그려지고 depth 패널엔 그려지는 걸로 확인됩니다.
-  - **triangulation(빨강):** depth 맵에 구멍 난 **왼발목**을 RGB 삼각측량만으로 복원.
-- 옵션: `--num-frames N`(길이) · `--fps`(One-Euro 주파수 겸 재생 속도) · `--depth-min/--depth-max`
-  (유효 depth 범위, m) · `--video <경로>`(출력 MP4).
-
-### 3-C′. (실제) MVOR RGB-D 융합 — hybrid `fused` 경로 (`examples/mvor_fusion_demo.py`)
-
-3-C가 **합성**으로 보여준 fused 경로를, **MVOR**(Multi-View Operating Room) 데이터셋의
-**실픽셀 + 실depth**로 그대로 돌립니다. MVOR은 캘리브된 RGB-D 카메라 3대가 한 장면을 보므로,
-2대(이상) color로 삼각측량 + 1대 정렬 depth로 fusion → "캘리브된 멀티뷰 RGB + 정렬 depth"라는
-fused 경로의 전제를 실데이터로 충족합니다(README가 말한 "공개 단일 데이터셋 없음"을 메우는 셋업).
-
-> 카메라 좌표계: world == MVOR `cam1`. 캘리브의 `extrinsics[i]`는 `cam_i → cam1` 변환이라
-> world→cam 외부행렬은 **그 역행렬**입니다(어댑터가 처리). MVOR 자체 3D 주석에 대해 재투영
-> 오차 ~11–15 px로 검증됨(역행렬을 안 쓰면 45–183 px로 어긋남).
-
-**① 데이터 준비** — 이미지 zip + 주석 JSON:
-```bash
-# 이미지 (RGB-D ×3, day1/cam{1,2,3}/{color,depth}/*.png)
-wget https://s3.unistra.fr/camma_public/datasets/mvor/camma_mvor_dataset.zip
-unzip camma_mvor_dataset.zip -d data/mvor/
-# 카메라 캘리브 + 멀티뷰 인덱스 (작음)
-curl -L -o data/mvor/camma_mvor_2018.json \
-  https://raw.githubusercontent.com/CAMMA-public/MVOR/master/annotations/camma_mvor_2018.json
-```
-
-**② 실행** (OS 공통):
-```bash
-uv run python examples/mvor_fusion_demo.py \
-  --mvor-root data/mvor/camma_mvor_dataset --json data/mvor/camma_mvor_2018.json \
-  --num-frames 80 --device cuda
-```
-
-- 산출물: `output/mvor_fusion_pose3d.mp4` — `[cam RGB+2D | cam RGB+2D | depth+2D | 3D(출처색)]` 4분할.
-  콘솔에 10프레임마다 `fused=… depth=… tri=… missing=…`(관절 출처별 개수).
-- 출처 색은 3-C와 동일: **fused(초록)** 삼각측량+depth, **depth(파랑)** RGB 가림을 depth가 보완,
-  **triangulation(빨강)** depth 구멍을 RGB만으로 복원.
-- 옵션: `--depth-cam N`(depth 제공 카메라 1-based cam_id, 기본 3) · `--day` · `--start` ·
-  `--num-frames` · `--depth-min/--depth-max` · `--depth-scale`(raw→m 나눗셈, 기본 1000) ·
-  `--device cpu|cuda` · `--video`.
-- MVOR은 다인 장면이라 단일 인물 가정상 RTMPose `detect_best`가 최고신뢰 1명만 잡습니다.
-- **실측 확인 (MVOR day1):** 실데이터에서 정상 동작 — RTMPose 실검출 + 실depth로 fused 경로가
-  돌아갑니다. 출력은 `1280×240` 4분할 MP4(패널 320×240 ×4, 10 fps). 출처 카운트는 실제 OR
-  장면(다인·임상 가림) 특성상 프레임별로 변동합니다 — 예: `f0 fused=2 depth=2 tri=3 missing=10`,
-  `f10 fused=15 depth=0 tri=0 missing=2`(추적 인물이 일부 시야 밖이면 missing↑). GPU가 없으면
-  검출기가 자동으로 CPU로 폴백합니다.
-
 ---
 
 ## (참고) GPU 가속 (NVIDIA CUDA)
@@ -377,7 +294,7 @@ config/cameras.yaml              calibration + 파이프라인 설정
 src/
   core/{types,geometry}.py       공용 dataclass, COCO-17, 기하 프리미티브
   io/{frame_reader,depth_reader}.py  다중 뷰 동기 리더 + depth 추상화(ABC+Dummy)
-  io/sources/{rgbd_source,tum,realsense,panoptic,mvor}.py  RGB-D/멀티뷰 데이터셋 어댑터
+  io/sources/{rgbd_source,tum,realsense,panoptic}.py  RGB-D/멀티뷰 데이터셋 어댑터
   io/keypoints_io.py             3D 포즈 JSON/NPY 직렬화
   pose2d/rtmpose_detector.py     rtmlib RTMPose 래퍼 (TORCH_HOME=./models)
   calibration/{intrinsics,extrinsics,reprojection,camera_io}.py  보정 + 리포트 + yaml I/O
@@ -390,8 +307,6 @@ examples/
   realtime_demo.py               (2) 실시간 2D 17키포인트 추출 (실제 RTMPose, MP4)
   rgbd_video_demo.py             (3-A) RGB-D depth 활용 3D → MP4
   panoptic_video_demo.py         (3-B) 멀티뷰 HD 삼각측량 3D → MP4
-  fusion_demo.py                 (3-C) (합성) RGB+Depth 융합 hybrid fused 경로 → MP4
-  mvor_fusion_demo.py            (3-C′) (실제) MVOR RGB-D 융합 hybrid fused 경로 → MP4
 run.py                           실제 라이브/녹화 멀티뷰 엔트리포인트
 tests/                           수치 모듈 단위/통합 테스트
 data/, models/, output/          (gitignore) 데이터셋 / 모델 캐시 / 산출물
